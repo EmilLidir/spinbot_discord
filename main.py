@@ -1,10 +1,68 @@
+#"MTM1MjQxOTgxMDE2MzY5MTU1MA.GtYKt0.lPJhq1CMwXXP0BHUxgXuLUEgdaekmHdaP_ClMk"
+
+
+
+
 import discord
 from discord import app_commands
 import asyncio
+import os
 import websocket
 import time
 
-TOKEN = "MTM1MjQxOTgxMDE2MzY5MTU1MA.GtYKt0.lPJhq1CMwXXP0BHUxgXuLUEgdaekmHdaP_ClMk"
+# Bot-Token aus Umgebungsvariablen (Railway & Lokale Sicherheit)
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
+    def __init__(self):
+        super().__init__()
+
+        self.username = discord.ui.TextInput(
+            label="Benutzername",
+            placeholder="Gib deinen Empire-Benutzernamen ein...",
+            required=True
+        )
+        self.password = discord.ui.TextInput(
+            label="Passwort",
+            placeholder="Gib dein Passwort ein...",
+            style=discord.TextStyle.short,
+            required=True
+        )
+        self.spins = discord.ui.TextInput(
+            label="Anzahl der Spins",
+            placeholder="Wie oft soll das Rad gedreht werden?",
+            style=discord.TextStyle.short,
+            required=True
+        )
+
+        self.add_item(self.username)
+        self.add_item(self.password)
+        self.add_item(self.spins)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        username = self.username.value
+        password = self.password.value
+        spins = int(self.spins.value)
+
+        await interaction.response.send_message("🔒 Deine Eingaben wurden verarbeitet!", ephemeral=True)
+
+        embed = discord.Embed(
+            title="🎰 SpinBot gestartet!",
+            description=f"Starte `{spins}` Spins für `{username}`...",
+            color=discord.Color.green()
+        )
+        embed.set_footer(text="Bitte warten, bis alle Spins abgeschlossen sind...")
+        await interaction.followup.send(embed=embed)
+
+        await asyncio.to_thread(spin_lucky_wheel, username, password, spins)
+
+        embed_done = discord.Embed(
+            title="✅ Spins abgeschlossen!",
+            description=f"Alle `{spins}` Spins für `{username}` wurden erfolgreich ausgeführt!",
+            color=discord.Color.blue()
+        )
+        await interaction.followup.send(embed=embed_done)
+
 
 class SpinBot(discord.Client):
     def __init__(self):
@@ -53,18 +111,7 @@ def spin_lucky_wheel(username, password, spins):
     log("🎉 Alle Lose wurden gedreht!")
 
 @bot.tree.command(name="spin", description="Starte das Glücksrad-Drehen!")
-async def spin(interaction: discord.Interaction, username: str, password: str, spins: int):
-    # Ephemeral Message → Nur der Nutzer sieht die Nachricht mit dem Passwort
-    await interaction.response.send_message("🔒 Dein Passwort wurde sicher verarbeitet!", ephemeral=True)
-
-    # Normale Nachricht ohne Passwort → Für alle sichtbar
-    embed = discord.Embed(title="🎰 SpinBot gestartet!", description=f"Starte `{spins}` Spins für `{username}`...", color=discord.Color.green())
-    embed.set_footer(text="Bitte warten, bis alle Spins abgeschlossen sind...")
-    await interaction.followup.send(embed=embed)
-
-    await asyncio.to_thread(spin_lucky_wheel, username, password, spins)
-
-    embed_done = discord.Embed(title="✅ Spins abgeschlossen!", description=f"Alle `{spins}` Spins für `{username}` wurden erfolgreich ausgeführt!", color=discord.Color.blue())
-    await interaction.followup.send(embed=embed_done)
+async def spin(interaction: discord.Interaction):
+    await interaction.response.send_modal(SpinModal())
 
 bot.run(TOKEN)
