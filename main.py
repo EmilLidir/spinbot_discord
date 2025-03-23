@@ -1,6 +1,4 @@
-#"MTM1MjQxOTgxMDE2MzY5MTU1MA.GtYKt0.lPJhq1CMwXXP0BHUxgXuLUEgdaekmHdaP_ClMk"
-
-
+#MTM1MjQxOTgxMDE2MzY5MTU1MA.GtYKt0.lPJhq1CMwXXP0BHUxgXuLUEgdaekmHdaP_ClMk
 
 
 import discord
@@ -10,7 +8,7 @@ import os
 import websocket
 import time
 
-# Bot-Token aus Umgebungsvariablen (Railway & Lokale Sicherheit)
+# Bot-Token aus Umgebungsvariablen
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
