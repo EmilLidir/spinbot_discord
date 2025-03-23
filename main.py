@@ -1,6 +1,3 @@
-#MTM1MjQxOTgxMDE2MzY5MTU1MA.GtYKt0.lPJhq1CMwXXP0BHUxgXuLUEgdaekmHdaP_ClMk
-
-
 import discord
 from discord import app_commands
 import asyncio
