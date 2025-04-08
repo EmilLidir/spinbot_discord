@@ -10,8 +10,6 @@ from collections import defaultdict
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-rewards = defaultdict(int)
-
 class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
     def __init__(self):
         super().__init__()
@@ -23,7 +21,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         )
         self.password = discord.ui.TextInput(
             label="Passwort",
-            placeholder="Gib dein Passwort ein...!!!",
+            placeholder="Gib dein Passwort (sicher) ein...",
             style=discord.TextStyle.short,
             required=True
         )
@@ -53,7 +51,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         embed.set_footer(text="Bitte warten, bis alle Spins abgeschlossen sind...")
         await interaction.followup.send(embed=embed)
 
-        await asyncio.to_thread(spin_lucky_wheel, username, password, spins)
+        rewards = await asyncio.to_thread(spin_lucky_wheel, username, password, spins)
 
         embed_done = discord.Embed(
             title="✅ Spins abgeschlossen!",
@@ -61,16 +59,11 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
             color=discord.Color.blue()
         )
 
-        reward_text = ""
-        if rewards:
-            reward_text += "**Belohnungen**\n"
-            for name, amount in rewards.items():
-                reward_text += f"• **{name}**: {amount}\n"
-        else:
-            reward_text = "Keine Belohnungen erkannt. ❌"
+        reward_lines = "\n".join([f"**{k}**: {v}" for k, v in rewards.items()])
+        embed_done.add_field(name="🎁 Belohnungen", value=reward_lines or "Keine Belohnungen erkannt", inline=False)
 
-        embed_done.add_field(name="📦 Belohnungen", value=reward_text, inline=False)
         await interaction.followup.send(embed=embed_done)
+
 
 class SpinBot(discord.Client):
     def __init__(self):
@@ -87,63 +80,71 @@ def log(message):
     timestamp = time.strftime("%H:%M:%S")
     print(f"[{timestamp}] {message}")
 
-def parse_reward_message(msg):
+def parse_reward_message(msg, rewards):
     try:
-        match = re.search(r"%xt%lws%1%0%(.*?)%", msg)
-        if not match:
-            return
-
-        json_str = match.group(1)
+        json_str = re.search(r"%xt%lws%1%0%(.*)%", msg).group(1)
         data = json.loads(json_str)
 
-        if "R" in data:
-            for entry in data["R"]:
-                typ = entry[0]
-                val = entry[1]
+        if "R" not in data:
+            return
 
-                if typ == "U":
-                    unit_id, amount = val
-                    if unit_id == 215:
-                        rewards["Schildmaid"] += amount
-                    elif unit_id == 238:
-                        rewards["Walküren-Scharfschützin"] += amount
-                    elif unit_id == 227:
-                        rewards["Beschützer des Nordens"] += amount
-                    elif unit_id == 216:
-                        rewards["Walküren-Waldläuferin"] += amount
-                    elif amount == 1000:
-                        rewards["Werkzeuge"] += 1
-                elif typ == "RI":
-                    if "EQ" in val:
-                        rewards["Ausrüstung"] += 1
-                    elif "GEM" in val:
-                        rewards["Ausrüstung"] += 1
-                elif typ == "CI":
-                    rewards["Konstrukte"] += 1
-                elif typ == "LM":
-                    rewards["Ausbaumarken"] += val
-                elif typ == "STP":
-                    rewards["Sceattas"] += val
-                elif typ == "LB":
-                    kistenmenge = val[1]
-                    rewards["Kisten"] += kistenmenge
-                elif typ == "UE":
-                    rewards["Mehrweller"] += 1
-                elif typ == "C2":
-                    rewards["Rubine"] += val
-                elif typ == "FKT":
-                    rewards["Geschenk Ludwig"] += val
-                elif typ == "PTK":
-                    rewards["Geschenk Beatrice"] += val
-                elif typ == "KTK":
-                    rewards["Geschenk Ulrich"] += val
-                elif typ == "D":
-                    rewards["Dekorationen"] += 1
+        for item in data["R"]:
+            reward_type = item[0]
+            reward_data = item[1]
+
+            if reward_type == "U":  # Truppen oder Werkzeuge
+                unit_id, amount = reward_data
+                if unit_id in [215, 238, 227, 216]:  # Truppen
+                    truppen_namen = {
+                        215: "Schildmaid",
+                        238: "Walküren-Scharfschützin",
+                        227: "Beschützer des Nordens",
+                        216: "Walküren-Waldläuferin"
+                    }
+                    rewards[truppen_namen[unit_id]] += amount
+                else:  # Werkzeuge
+                    rewards["Werkzeuge"] += amount
+
+            elif reward_type == "RI":  # Ausrüstung oder Edelsteine
+                rewards["Ausrüstung"] += 1
+
+            elif reward_type == "CI":  # Konstrukt
+                rewards["Konstrukte"] += 1
+
+            elif reward_type == "LM":  # Ausbaumarken
+                rewards["Ausbaumarken"] += reward_data
+
+            elif reward_type == "STP":  # Sceattas
+                rewards["Sceattas"] += reward_data
+
+            elif reward_type == "LB":  # Kisten
+                _, amount = reward_data
+                rewards["Kisten"] += amount
+
+            elif reward_type == "UE":
+                rewards["Mehrweller"] += 1
+
+            elif reward_type == "C2":
+                rewards["Rubine"] += reward_data
+
+            elif reward_type == "FKT":
+                rewards["Ludwig-Geschenke"] += reward_data
+
+            elif reward_type == "PTK":
+                rewards["Beatrice-Geschenke"] += reward_data
+
+            elif reward_type == "KTK":
+                rewards["Ulrich-Geschenke"] += reward_data
+
+            elif reward_type == "D":
+                rewards["Dekorationen"] += 1
 
     except Exception as e:
         log(f"❌ Fehler beim Parsen: {e}")
 
 def spin_lucky_wheel(username, password, spins):
+    rewards = defaultdict(int)
+
     try:
         ws = websocket.WebSocket()
         ws.connect("wss://ep-live-de1-game.goodgamestudios.com/")
@@ -167,16 +168,25 @@ def spin_lucky_wheel(username, password, spins):
         for i in range(spins):
             log(f"🎰 Spin {i+1}/{spins}")
             ws.send("%xt%EmpireEx_2%lws%1%{\"LWET\":1}%")
-            msg = ws.recv()
-            print(f"🔍 Empfangen: {msg}")
-            parse_reward_message(msg)
-            time.sleep(0.1)
+            time.sleep(0.3)
+
+            try:
+                msg = ws.recv()
+                if isinstance(msg, bytes):
+                    msg = msg.decode("utf-8", errors="ignore")
+                log(f"🔍 Empfangen: {msg}")
+
+                if "%xt%lws%" in msg:
+                    parse_reward_message(msg, rewards)
+            except Exception as e:
+                log(f"⚠️ Fehler beim Empfangen: {e}")
 
         log("✅ Alle Spins abgeschlossen!")
         ws.close()
-
     except Exception as e:
         log(f"❌ Fehler beim Spin-Prozess: {e}")
+
+    return rewards
 
 @bot.tree.command(name="spin", description="Starte das Glücksrad-Drehen!")
 async def spin(interaction: discord.Interaction):
