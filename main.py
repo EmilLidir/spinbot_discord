@@ -32,7 +32,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         self.password = discord.ui.TextInput(
             label="Passwort",
             placeholder="Gib dein Passwort (sicher) ein...",
-            style=discord.TextStyle.password, # Masks the input
+            style=discord.TextStyle.short, # CORRECTED: Use short style for password
             required=True,
             max_length=50
         )
@@ -48,6 +48,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         self.add_item(self.password)
         self.add_item(self.spins)
 
+    # --- on_submit and on_error methods remain the same ---
     async def on_submit(self, interaction: discord.Interaction):
         """Handles the modal submission."""
         username = self.username.value
@@ -116,8 +117,11 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         """Handles errors originating from the modal interaction itself."""
         print(f"Error in SpinModal interaction: {error}")
         traceback.print_exc()
-        await interaction.followup.send('Hoppla! Etwas ist schiefgelaufen.', ephemeral=True)
-
+        # Use followup because the interaction might already be responded to or deferred
+        if interaction.response.is_done():
+             await interaction.followup.send('Hoppla! Etwas ist beim Öffnen des Formulars schiefgelaufen.', ephemeral=True)
+        else:
+             await interaction.response.send_message('Hoppla! Etwas ist beim Öffnen des Formulars schiefgelaufen.', ephemeral=True)
 
 # --- Discord Bot Class ---
 class SpinBot(discord.Client):
