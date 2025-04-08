@@ -152,42 +152,37 @@ def log(message):
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] {message}")
 
+
 def parse_reward_message(msg, rewards):
     """Parses the specific reward message format from the game server."""
     try:
-        # Regex to find the specific reward message format and extract the JSON part
-        # %xt%<extension>%<command>%<room_id>%<data_type>%<json_payload>%
         match = re.search(r"%xt%lws%1%0%(.*)%", msg)
         if not match:
-            # Avoid logging every single non-matching message if many are expected
-            # Only log potentially relevant game messages that start similarly
             if msg.startswith("%xt%"):
                  log(f"ℹ️ Ignoriere Nachricht (passt nicht zum Belohnungsformat %xt%lws%1%0%...): {msg[:80]}...")
-            return # Not the message format we are looking for
+            return
 
         log(f"🎯 Potentielle Belohnungsnachricht gefunden: {msg[:100]}...")
         json_str = match.group(1)
         data = json.loads(json_str)
 
-        # Check if the expected reward data structure is present
         if "R" not in data or not isinstance(data["R"], list):
             log(f"ℹ️ Keine gültige 'R' (Rewards) Liste im geparsten JSON gefunden: {data}")
-            return # No reward array or wrong format in this specific message
+            return
 
         log(f"✨ Verarbeite Belohnungen aus JSON: {data['R']}")
 
         for item in data["R"]:
-            # Basic validation of item structure
             if not isinstance(item, list) or len(item) < 2:
                 log(f"  ⚠️ Überspringe ungültiges Belohnungsitem-Format: {item}")
                 continue
 
             reward_type = item[0]
-            reward_data = item[1]
+            reward_data = item[1] # This is usually the amount or [type_id, amount]
 
             # --- Reward Type Handling ---
-            # (Using .get for safer dictionary lookups)
             if reward_type == "U": # Truppen oder Werkzeuge
+                # ... (keep existing U handling) ...
                 unit_id, amount = reward_data
                 truppen_namen = {
                     215: "Schildmaid", 238: "Walküren-Scharfschützin",
@@ -197,74 +192,89 @@ def parse_reward_message(msg, rewards):
                     reward_name = truppen_namen[unit_id]
                     rewards[reward_name] += amount
                     log(f"  -> Belohnung: {amount:,}x {reward_name}")
-                else: # Werkzeuge (assuming other U types are tools)
+                else: # Werkzeuge
                     rewards["Werkzeuge"] += amount
                     log(f"  -> Belohnung: {amount:,}x Werkzeuge (ID: {unit_id})")
 
             elif reward_type == "RI": # Ausrüstung oder Edelsteine
-                 amount = 1 # Usually count is 1 for these items
-                 rewards["Ausrüstung/Edelsteine"] += amount # Combine for simplicity
+                # ... (keep existing RI handling) ...
+                 amount = 1
+                 rewards["Ausrüstung/Edelsteine"] += amount
                  log(f"  -> Belohnung: {amount:,}x Ausrüstung/Edelsteine")
 
             elif reward_type == "CI": # Konstrukt
+                # ... (keep existing CI handling) ...
                 amount = 1
                 rewards["Konstrukte"] += amount
                 log(f"  -> Belohnung: {amount:,}x Konstrukte")
 
             elif reward_type == "LM": # Ausbaumarken
+                # ... (keep existing LM handling) ...
                 amount = reward_data
                 rewards["Ausbaumarken"] += amount
                 log(f"  -> Belohnung: {amount:,}x Ausbaumarken")
 
-            elif reward_type == "STP": # Sceattas (Special Currency)
+            elif reward_type == "STP": # Sceattas
+                # ... (keep existing STP handling) ...
                 amount = reward_data
                 rewards["Sceattas"] += amount
                 log(f"  -> Belohnung: {amount:,}x Sceattas")
 
-            elif reward_type == "LB": # Kisten (Loot Boxes)
-                 # reward_data might be [box_type_id, amount]
+            # ----- ADDED CONDITION FOR SLWT -----
+            elif reward_type == "SLWT": # Spin Lose Wheel Ticket (Guessing meaning)
+                 # reward_data is likely the amount, based on example [['SLWT', 1]]
+                 amount = reward_data if isinstance(reward_data, int) else 1
+                 rewards["Lose"] += amount # Use "Lose" as the key
+                 log(f"  -> Belohnung: {amount:,}x Lose (SLWT)") # Log clearly
+            # ------------------------------------
+
+            elif reward_type == "LB": # Kisten
+                # ... (keep existing LB handling) ...
                  amount = reward_data[1] if isinstance(reward_data, list) and len(reward_data) > 1 else 1
                  rewards["Kisten"] += amount
                  log(f"  -> Belohnung: {amount:,}x Kisten")
 
-            elif reward_type == "UE": # Mehrweller (Unit Enchantment?)
-                 amount = 1 # Assuming always 1
+            elif reward_type == "UE": # Mehrweller
+                # ... (keep existing UE handling) ...
+                 amount = 1
                  rewards["Mehrweller"] += amount
                  log(f"  -> Belohnung: {amount:,}x Mehrweller")
 
-            elif reward_type == "C2": # Rubine (Premium Currency)
+            elif reward_type == "C2": # Rubine
+                # ... (keep existing C2 handling) ...
                  amount = reward_data
                  rewards["Rubine"] += amount
                  log(f"  -> Belohnung: {amount:,}x Rubine")
 
-            elif reward_type == "FKT": # Ludwig-Geschenke (Event Item?)
+            elif reward_type == "FKT": # Ludwig-Geschenke
+                # ... (keep existing FKT handling) ...
                  amount = reward_data
                  rewards["Ludwig-Geschenke"] += amount
                  log(f"  -> Belohnung: {amount:,}x Ludwig-Geschenke")
 
-            elif reward_type == "PTK": # Beatrice-Geschenke (Event Item?)
+            elif reward_type == "PTK": # Beatrice-Geschenke
+                # ... (keep existing PTK handling) ...
                  amount = reward_data
                  rewards["Beatrice-Geschenke"] += amount
                  log(f"  -> Belohnung: {amount:,}x Beatrice-Geschenke")
 
-            elif reward_type == "KTK": # Ulrich-Geschenke (Event Item?)
+            elif reward_type == "KTK": # Ulrich-Geschenke
+                # ... (keep existing KTK handling) ...
                  amount = reward_data
                  rewards["Ulrich-Geschenke"] += amount
                  log(f"  -> Belohnung: {amount:,}x Ulrich-Geschenke")
 
             elif reward_type == "D": # Dekorationen
-                 amount = 1 # Assuming always 1
+                # ... (keep existing D handling) ...
+                 amount = 1
                  rewards["Dekorationen"] += amount
                  log(f"  -> Belohnung: {amount:,}x Dekorationen")
 
-            else:
-                 # Handle unknown types gracefully
-                 amount = 1 # Default amount if structure is unknown
-                 if isinstance(reward_data, (int, float)):
-                     amount = reward_data
-                 elif isinstance(reward_data, list) and len(reward_data) > 1 and isinstance(reward_data[1], (int, float)):
-                     amount = reward_data[1] # Guess amount might be second element
-
+            else: # Handle unknown types
+                # ... (keep existing else handling) ...
+                 amount = 1
+                 if isinstance(reward_data, (int, float)): amount = reward_data
+                 elif isinstance(reward_data, list) and len(reward_data) > 1 and isinstance(reward_data[1], (int, float)): amount = reward_data[1]
                  reward_key = f"Unbekannt_{reward_type}"
                  rewards[reward_key] += amount
                  log(f"  -> Unbekannter Belohnungstyp: {reward_type} mit Daten {reward_data}. Gezählt als '{reward_key}'.")
@@ -273,8 +283,9 @@ def parse_reward_message(msg, rewards):
         log(f"❌ Fehler beim JSON-Parsen des extrahierten Strings '{json_str}': {e}")
     except Exception as e:
         log(f"❌ Unerwarteter Fehler beim Parsen der Nachricht '{msg[:100]}...': {e}")
-        traceback.print_exc() # Log full traceback for unexpected parsing errors
+        traceback.print_exc()
 
+# --- Make sure this updated parse_reward_message function is used in your main file ---
 
 # --- Keep SpinModal, SpinBot, log, and the *detailed* parse_reward_message from the full code ---
 # Ensure parse_reward_message still has the check:
