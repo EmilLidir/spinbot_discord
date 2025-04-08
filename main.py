@@ -276,80 +276,66 @@ def parse_reward_message(msg, rewards):
         traceback.print_exc() # Log full traceback for unexpected parsing errors
 
 
-# --- Core WebSocket Logic (Simple Delay Method) ---
+# --- Keep SpinModal, SpinBot, log, and the *detailed* parse_reward_message from the full code ---
+# Ensure parse_reward_message still has the check:
+# match = re.search(r"%xt%lws%1%0%(.*)%", msg)
+# if not match:
+#     # Log ignored message (optional)
+#     return
+# ... rest of parsing logic ...
+
+# --- Core WebSocket Logic (Robust Receive Loop Method) ---
 def spin_lucky_wheel(username, password, spins):
-    """Connects to the game, logs in, performs spins, and collects rewards."""
+    """Connects, logs in, performs spins, and waits specifically for reward messages."""
     rewards = defaultdict(int)
-    ws = None # Initialize ws to None for use in finally block
+    ws = None
 
-    # --- Timeouts and Delays (Adjust as needed) ---
-    connect_timeout = 20.0 # Timeout for establishing the connection (seconds)
-    login_wait_time = 6.0  # Seconds to wait *after* sending final login command
-    spin_send_delay = 0.2  # Small delay before sending spin command (seconds)
-    spin_response_wait_time = 1.0 # Seconds to wait *after* sending spin command before trying to receive
-
-    # Set a default timeout for all ws.recv() calls after login
-    # Prevents indefinite blocking if the server stops responding.
-    default_receive_timeout = 15.0
+    # --- Timeouts and Delays ---
+    connect_timeout = 20.0
+    login_wait_time = 5.0 # Still wait a bit after login seems successful
+    # Timeout *per spin* to wait for the specific reward message
+    # Increase this if rewards sometimes take longer to arrive
+    receive_timeout_per_spin = 15.0 # seconds
+    spin_send_delay = 0.3 # Small delay before sending next spin command
 
     try:
-        # --- Establish WebSocket Connection ---
-        log(f"Versuche Verbindung herzustellen zu wss://ep-live-de1-game.goodgamestudios.com/ (Timeout: {connect_timeout}s)")
-        # Use create_connection for simpler timeout handling during connection
+        log(f"Versuche Verbindung herzustellen (Timeout: {connect_timeout}s)")
         ws = websocket.create_connection(
             "wss://ep-live-de1-game.goodgamestudios.com/",
             timeout=connect_timeout
-            # Optional: Add origin header if needed by server
-            # header={"Origin": "https://empire-html5.goodgamestudios.com"}
         )
         log("✅ WebSocket-Verbindung erfolgreich hergestellt!")
 
-        # --- Login Sequence ---
+        # --- Login Sequence (Keep as before) ---
         log("Sende Login-Sequenz...")
-        # 1. Version Check
         ws.send("<msg t='sys'><body action='verChk' r='0'><ver v='166' /></body></msg>")
-        time.sleep(0.1) # Short delay between commands is often needed
-
-        # 2. Initial Login Frame
+        time.sleep(0.1)
         ws.send("<msg t='sys'><body action='login' r='0'><login z='EmpireEx_2'><nick><![CDATA[]]></nick><pword><![CDATA[1119057%de%0]]></pword></login></body></msg>")
         time.sleep(0.1)
-
-        # 3. Send Username Hint (vln = ?)
         ws.send(f"%xt%EmpireEx_2%vln%1%{{\"NOM\":\"{username}\"}}%")
         time.sleep(0.1)
-
-        # 4. Send Actual Login Credentials (lli = login?)
-        # Note: Ensure AID, SID, PLFID etc. are correct/current if needed. These might be static or dynamic.
         login_payload = {
-            "CONM": 491, "RTM": 74, "ID": 0, "PL": 1,
-            "NOM": username, "PW": password, "LT": None,
-            "LANG": "de", "DID": "0",
-            "AID": "1735403904264644306", # This might need updating or removal if dynamic
-            "KID": "", "REF": "https://empire-html5.goodgamestudios.com",
-            "GCI": "", "SID": 9, "PLFID": 1
+            "CONM": 491, "RTM": 74, "ID": 0, "PL": 1, "NOM": username, "PW": password,
+            "LT": None, "LANG": "de", "DID": "0", "AID": "1735403904264644306", "KID": "",
+            "REF": "https://empire-html5.goodgamestudios.com", "GCI": "", "SID": 9, "PLFID": 1
         }
         login_command = f"%xt%EmpireEx_2%lli%1%{json.dumps(login_payload)}%"
         ws.send(login_command)
         log(f"🔐 Anmeldeversuch für '{username}' gesendet.")
 
-        # --- Wait After Login Attempt ---
-        log(f"⏳ Warte {login_wait_time} Sekunden nach dem Login-Versuch, damit der Server verarbeiten kann...")
+        log(f"⏳ Warte {login_wait_time} Sekunden nach dem Login-Versuch...")
         time.sleep(login_wait_time)
 
-        # Optional: Receive and discard any messages received during the wait
+        # Optional: Clear buffer after login wait
         try:
-             ws.settimeout(0.1) # Very short timeout
-             while True:
-                 msg = ws.recv()
-                 log(f"🌀 Verwerfe Nachricht nach Login: {msg[:80]}...")
-        except (websocket.WebSocketTimeoutException, TimeoutError):
-             pass # Expected timeout if no messages are pending
-        except Exception as discard_err:
-             log(f"⚠️ Fehler beim Verwerfen von Nachrichten nach Login: {discard_err}")
-        finally:
-            # Reset timeout for subsequent operations
-            ws.settimeout(default_receive_timeout)
+            ws.settimeout(0.1)
+            while True: msg = ws.recv()
+        except (websocket.WebSocketTimeoutException, TimeoutError): pass # Expected
+        except Exception as discard_err: log(f"⚠️ Fehler beim Verwerfen alter Nachrichten: {discard_err}")
 
+        # Set the main timeout for receive operations within the loop
+        # This will be adjusted dynamically per recv call based on remaining time
+        # ws.settimeout(receive_timeout_per_spin) # Set a base timeout
 
         log("🚀 Beginne mit den Glücksrad-Spins...")
 
@@ -357,90 +343,102 @@ def spin_lucky_wheel(username, password, spins):
         for i in range(spins):
             current_spin = i + 1
             log(f"🎰 [{current_spin}/{spins}] Bereite Spin vor...")
-            time.sleep(spin_send_delay) # Small delay before sending
+            time.sleep(spin_send_delay) # Small delay before sending command
 
             # --- Send Spin Command ---
-            spin_command = "%xt%EmpireEx_2%lws%1%{\"LWET\":1}%" # lws = lucky wheel spin? LWET=1 might mean 'spin once'
+            spin_command = "%xt%EmpireEx_2%lws%1%{\"LWET\":1}%"
             try:
                 ws.send(spin_command)
                 log(f"-> Befehl für Spin {current_spin} gesendet.")
-            except (websocket.WebSocketConnectionClosedException, BrokenPipeError) as send_err:
-                log(f"❌ Fehler beim Senden des Spin-Befehls {current_spin}: Verbindung geschlossen. {send_err}")
-                log("🛑 Breche weitere Spins ab.")
-                break # Stop if sending fails due to connection issue
             except Exception as send_err:
-                 log(f"❌ Unerwarteter Fehler beim Senden des Spin-Befehls {current_spin}: {send_err}")
-                 log("🛑 Breche weitere Spins ab.")
-                 traceback.print_exc()
-                 break
-
-
-            # --- Wait Fixed Time for Response ---
-            log(f"⏳ [{current_spin}/{spins}] Warte {spin_response_wait_time}s auf die Antwort...")
-            time.sleep(spin_response_wait_time)
-
-            # --- Receive the *next* available message ---
-            try:
-                log(f"👂 [{current_spin}/{spins}] Empfange nächste Nachricht...")
-                msg = ws.recv() # Attempt to receive one message
-                if isinstance(msg, bytes):
-                    msg = msg.decode("utf-8", errors="ignore") # Decode if necessary
-
-                # --- Attempt to parse the received message as a reward ---
-                parse_reward_message(msg, rewards)
-
-            except (websocket.WebSocketTimeoutException, TimeoutError):
-                # This triggers if *no message at all* arrives within default_receive_timeout
-                log(f"⏰ Timeout ({default_receive_timeout}s) beim Warten auf *irgendeine* Antwort nach Spin {current_spin}.")
-                log("Möglicherweise Verbindungsproblem oder Server antwortet nicht. Versuche nächsten Spin...")
-                # Decide whether to break or continue: Continuing might recover if it was a temporary glitch.
-                # break # Uncomment to stop spins on timeout
-                continue # Continue with the next spin attempt
-
-            except (websocket.WebSocketConnectionClosedException, BrokenPipeError) as conn_err:
-                log(f"❌ WebSocket-Verbindung wurde unerwartet geschlossen beim Empfangen nach Spin {current_spin}. {conn_err}")
-                log("🛑 Breche weitere Spins ab.")
-                break # Stop the process
-
-            except Exception as recv_err:
-                log(f"⚠️ Unerwarteter Fehler beim Empfangen/Verarbeiten nach Spin {current_spin}: {recv_err}")
+                log(f"❌ Fehler beim Senden des Spin-Befehls {current_spin}: {send_err}. Breche ab.")
                 traceback.print_exc()
-                # Decide if you want to stop or continue
-                # break # Safer to break on unexpected receive errors
-                continue # Try next spin
+                break # Stop all spins if sending fails
+
+            # --- Wait Specifically for the Reward Message ---
+            spin_reward_found = False
+            search_start_time = time.time()
+            log(f"👂 [{current_spin}/{spins}] Warte auf Belohnungsnachricht (max {receive_timeout_per_spin}s)...")
+
+            while time.time() - search_start_time < receive_timeout_per_spin:
+                try:
+                    # Calculate remaining time for this attempt
+                    remaining_time = max(0.1, receive_timeout_per_spin - (time.time() - search_start_time))
+                    ws.settimeout(remaining_time) # Set timeout for this specific recv
+
+                    msg = ws.recv()
+                    if isinstance(msg, bytes):
+                        msg = msg.decode("utf-8", errors="ignore")
+
+                    # *** THE CRITICAL CHECK ***
+                    # Check if it's the specific reward message format we want
+                    if msg.startswith("%xt%lws%1%0%"):
+                        log(f"🎯 [{current_spin}/{spins}] Passende Belohnungsnachricht gefunden!")
+                        parse_reward_message(msg, rewards) # Parse the found message
+                        spin_reward_found = True
+                        break # Found the reward, exit inner 'while' loop and go to next spin
+                    else:
+                        # Log other messages briefly to see what's being ignored
+                        if msg.startswith("%xt%"): # Only log game-related messages
+                             log(f"🌀 [{current_spin}/{spins}] Ignoriere Nachricht: {msg[:80]}...")
+                        # else: log(f"🌀 [{current_spin}/{spins}] Ignoriere unspezifische Nachricht.")
+
+                except (websocket.WebSocketTimeoutException, TimeoutError):
+                    # This means ws.recv() timed out waiting for *any* message within remaining_time
+                    # Check if the overall spin timeout has been exceeded by the outer loop condition
+                    if not (time.time() - search_start_time < receive_timeout_per_spin):
+                         log(f"⏰ [{current_spin}/{spins}] Timeout ({receive_timeout_per_spin}s) erreicht beim Warten auf Belohnungsnachricht.")
+                    # else: # Timeout on recv, but overall time not expired yet, loop continues
+                    #    log(f"-> Kurzer Timeout bei recv(), versuche erneut...")
+                    # Break inner loop on timeout either way, handled below
+                    break
+
+                except (websocket.WebSocketConnectionClosedException, BrokenPipeError) as conn_err:
+                    log(f"❌ [{current_spin}/{spins}] Verbindung geschlossen beim Warten auf Belohnung: {conn_err}. Breche ab.")
+                    raise conn_err # Re-raise to break outer loop and stop everything
+
+                except Exception as recv_err:
+                    log(f"⚠️ [{current_spin}/{spins}] Fehler beim Empfangen/Prüfen: {recv_err}")
+                    traceback.print_exc()
+                    # Optionally break inner loop here too, or let it retry
+                    break # Safer to break inner loop on unexpected errors
+
+            # --- After the inner receive loop for this spin ---
+            if not spin_reward_found:
+                 # This happens if the inner loop exited due to timeout or error without finding the reward msg
+                 log(f"🤷 [{current_spin}/{spins}] Keine passende Belohnungsnachricht innerhalb von {receive_timeout_per_spin}s gefunden oder Fehler beim Empfang.")
+                 # Decide if you want to stop all spins here or just continue with the next
+                 # continue # Continue to next spin is usually desired
 
         log("✅ Alle angeforderten Spins wurden versucht.")
 
+    # --- Exception Handling (keep the detailed blocks from previous full code) ---
     except websocket.WebSocketTimeoutException as e:
         log(f"❌ Timeout ({connect_timeout}s) beim Herstellen der WebSocket-Verbindung. Server nicht erreichbar? {e}")
-        # Raise exception so the calling Discord command knows it failed critically
         raise ConnectionError("Connection Timeout") from e
     except websocket.WebSocketBadStatusException as e:
          log(f"❌ Fehler beim WebSocket Handshake (Bad Status): {e.status_code} {e.resp_body}. URL korrekt? Origin benötigt?")
          raise ConnectionError("WebSocket Handshake Failed") from e
     except (websocket.WebSocketConnectionClosedException, BrokenPipeError) as e:
          log(f"❌ WebSocket-Verbindung war geschlossen oder wurde während des Prozesses unerwartet beendet. {e}")
-         # Don't re-raise if rewards might have been partially collected, let it return what was found
+         # Let it return potentially partial rewards
     except Exception as e:
         log(f"❌ Schwerwiegender Fehler im spin_lucky_wheel Prozess: {e}")
-        traceback.print_exc() # Print stack trace for debugging critical errors
-        # Re-raise critical errors so the Discord part can report failure
-        raise e
+        traceback.print_exc()
+        raise e # Re-raise critical errors
     finally:
         # --- Ensure the WebSocket is closed cleanly ---
         if ws and ws.connected:
             log("🔌 Schließe WebSocket-Verbindung.")
-            try:
-                ws.close()
-            except Exception as close_err:
-                log(f"⚠️ Fehler beim Schließen der WebSocket-Verbindung: {close_err}")
-        elif ws:
-             log("ℹ️ WebSocket-Verbindung war bereits geschlossen.")
-        else:
-            log("ℹ️ Keine WebSocket-Verbindung zum Schließen vorhanden.")
+            try: ws.close()
+            except Exception as close_err: log(f"⚠️ Fehler beim Schließen der WebSocket-Verbindung: {close_err}")
+        elif ws: log("ℹ️ WebSocket-Verbindung war bereits geschlossen.")
+        else: log("ℹ️ Keine WebSocket-Verbindung zum Schließen vorhanden.")
 
-    log(f"Gesammelte Belohnungen: {dict(rewards)}") # Log final rewards to console
-    return dict(rewards) # Return a standard dict
+    log(f"Gesammelte Belohnungen: {dict(rewards)}")
+    return dict(rewards)
+
+# --- Ensure the rest of the bot code (SpinModal, SpinBot, @bot.tree.command, bot.run) is integrated with this function ---
 
 
 # --- Bot Instance and Command Definition ---
