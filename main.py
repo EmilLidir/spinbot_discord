@@ -4,9 +4,28 @@ import asyncio
 import os
 import websocket
 import time
+import json
+import re
+from collections import defaultdict
 
 # Bot-Token aus Umgebungsvariablen
 TOKEN = os.getenv("DISCORD_TOKEN")
+
+# Mapping
+troop_ids = {
+    215: "Schildmaid",
+    238: "Walküren-Scharfschützin",
+    227: "Beschützer des Nordens",
+    216: "Walküren-Waldläuferin"
+}
+
+gift_map = {
+    "FKT": "Geschenke Ludwig",
+    "PTK": "Geschenk Beatrice",
+    "KTK": "Geschenke Ulrich"
+}
+
+reward_counter = defaultdict(int)  # 🧮 Alle Belohnungen werden hier gezählt
 
 class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
     def __init__(self):
@@ -49,7 +68,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         embed.set_footer(text="Bitte warten, bis alle Spins abgeschlossen sind...")
         await interaction.followup.send(embed=embed)
 
-        await asyncio.to_thread(spin_lucky_wheel, username, password, spins)
+        await asyncio.to_thread(spin_lucky_wheel, username, password, spins, interaction)
 
         embed_done = discord.Embed(
             title="✅ Spins abgeschlossen!",
@@ -74,7 +93,48 @@ def log(message):
     timestamp = time.strftime("%H:%M:%S")
     print(f"[{timestamp}] {message}")
 
-def spin_lucky_wheel(username, password, spins):
+def parse_reward_message(msg):
+    if "%xt%lws%" not in msg:
+        return
+
+    try:
+        json_str = re.search(r"%xt%lws%1%0%(.*)%", msg).group(1)
+        data = json.loads(json_str)
+
+        if "R" in data:
+            for reward in data["R"]:
+                r_type = reward[0]
+                r_value = reward[1]
+
+                if r_type == "U":
+                    item_id, amount = r_value
+                    if item_id in troop_ids:
+                        reward_counter[troop_ids[item_id]] += amount
+                    else:
+                        reward_counter["Werkzeuge"] += amount
+                elif r_type == "RI":
+                    reward_counter["Ausrüstung"] += 1
+                elif r_type == "CI":
+                    reward_counter["Konstrukte"] += 1
+                elif r_type == "LM":
+                    reward_counter["Ausbaumarken"] += r_value
+                elif r_type == "STP":
+                    reward_counter["Sceattas"] += r_value
+                elif r_type == "LB":
+                    reward_counter["Kisten"] += r_value[1]
+                elif r_type == "UE":
+                    reward_counter["Mehrweller"] += r_value
+                elif r_type == "C2":
+                    reward_counter["Rubine"] += r_value
+                elif r_type == "D":
+                    reward_counter["Dekorationen"] += r_value[1]
+                elif r_type in gift_map:
+                    reward_counter[gift_map[r_type]] += r_value
+
+    except Exception as e:
+        log(f"⚠️ Fehler beim Parsen der Message: {e}")
+
+def spin_lucky_wheel(username, password, spins, interaction):
     try:
         ws = websocket.WebSocket()
         ws.connect("wss://ep-live-de1-game.goodgamestudios.com/")
@@ -99,17 +159,34 @@ def spin_lucky_wheel(username, password, spins):
 
         log("🔐 Erfolgreich eingeloggt! Starte Spins...")
 
-        # Spins abschicken
         for i in range(spins):
             log(f"🎰 Spin {i+1}/{spins}")
             ws.send("%xt%EmpireEx_2%lws%1%{\"LWET\":1}%")
-            time.sleep(0.1)
+            msg = ws.recv()
+            parse_reward_message(msg)
 
         log("✅ Alle Spins abgeschlossen!")
         ws.close()
 
+        # Ergebnis an Discord senden
+        asyncio.run(send_summary(interaction))
+
     except Exception as e:
         log(f"❌ Fehler beim Spin-Prozess: {e}")
+
+async def send_summary(interaction):
+    summary_lines = []
+    for name, count in reward_counter.items():
+        summary_lines.append(f"**{name}:** `{count}`")
+
+    summary_text = "\n".join(summary_lines) if summary_lines else "Keine Belohnungen erkannt."
+
+    embed = discord.Embed(
+        title="🎁 Zusammenfassung deiner Belohnungen",
+        description=summary_text,
+        color=discord.Color.gold()
+    )
+    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="spin", description="Starte das Glücksrad-Drehen!")
 async def spin(interaction: discord.Interaction):
