@@ -19,7 +19,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         )
         self.password = discord.ui.TextInput(
             label="Passwort",
-            placeholder="Gib dein Passwort ein...",
+            placeholder="Gib dein Passwort ein (keiner kann dein Passwort sehen)...",
             style=discord.TextStyle.short,
             required=True
         )
@@ -74,36 +74,42 @@ def log(message):
     timestamp = time.strftime("%H:%M:%S")
     print(f"[{timestamp}] {message}")
 
-def drehe_los(username, password):
+def spin_lucky_wheel(username, password, spins):
     try:
         ws = websocket.WebSocket()
         ws.connect("wss://ep-live-de1-game.goodgamestudios.com/")
         log("✅ Verbindung hergestellt!")
 
+        # Schritt 1: Version check
         ws.send("<msg t='sys'><body action='verChk' r='0'><ver v='166' /></body></msg>")
         time.sleep(0.1)
+
+        # Schritt 2: Verbindungs-Handshake
         ws.send("<msg t='sys'><body action='login' r='0'><login z='EmpireEx_2'><nick><![CDATA[]]></nick><pword><![CDATA[1119057%de%0]]></pword></login></body></msg>")
         time.sleep(0.1)
+
+        # Schritt 3: Vor-Login mit Username
         ws.send(f"%xt%EmpireEx_2%vln%1%{{\"NOM\":\"{username}\"}}%")
         time.sleep(0.1)
 
+        # Schritt 4: Login mit Passwort
         login_befehl = f"%xt%EmpireEx_2%lli%1%{{\"CONM\":491,\"RTM\":74,\"ID\":0,\"PL\":1,\"NOM\":\"{username}\" ,\"PW\":\"{password}\",\"LT\":null,\"LANG\":\"de\",\"DID\":\"0\",\"AID\":\"1735403904264644306\",\"KID\":\"\",\"REF\":\"https://empire-html5.goodgamestudios.com\",\"GCI\":\"\",\"SID\":9,\"PLFID\":1}}%"
         ws.send(login_befehl)
-        time.sleep(0.1)
+        time.sleep(0.2)
 
-        ws.send("%xt%EmpireEx_2%lws%1%{\"LWET\":1}%")
-        log("🎰 Los gedreht!")
+        log("🔐 Erfolgreich eingeloggt! Starte Spins...")
+
+        # Spins abschicken
+        for i in range(spins):
+            log(f"🎰 Spin {i+1}/{spins}")
+            ws.send("%xt%EmpireEx_2%lws%1%{\"LWET\":1}%")
+            time.sleep(0.1)
+
+        log("✅ Alle Spins abgeschlossen!")
         ws.close()
 
     except Exception as e:
-        log(f"❌ Fehler: {e}")
-
-def spin_lucky_wheel(username, password, spins):
-    for i in range(spins):
-        log(f"🔄 Runde {i+1}/{spins}")
-        drehe_los(username, password)
-        time.sleep(0.1)
-    log("🎉 Alle Lose wurden gedreht!")
+        log(f"❌ Fehler beim Spin-Prozess: {e}")
 
 @bot.tree.command(name="spin", description="Starte das Glücksrad-Drehen!")
 async def spin(interaction: discord.Interaction):
