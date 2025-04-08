@@ -163,6 +163,8 @@ def spin_lucky_wheel(username, password, spins, interaction):
             log(f"🎰 Spin {i+1}/{spins}")
             ws.send("%xt%EmpireEx_2%lws%1%{\"LWET\":1}%")
             msg = ws.recv()
+            if isinstance(msg, bytes):
+                msg = msg.decode("utf-8", errors="ignore")
             parse_reward_message(msg)
 
         log("✅ Alle Spins abgeschlossen!")
