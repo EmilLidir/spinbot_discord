@@ -4,11 +4,13 @@ import asyncio
 import os
 import websocket
 import time
-import json
 import re
+import json
 from collections import defaultdict
 
 TOKEN = os.getenv("DISCORD_TOKEN")
+
+rewards = defaultdict(int)
 
 class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
     def __init__(self):
@@ -21,7 +23,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         )
         self.password = discord.ui.TextInput(
             label="Passwort",
-            placeholder="Gib dein Passwort ein (keiner kann dein Passwort sehen)...",
+            placeholder="Gib dein Passwort ein...!!!",
             style=discord.TextStyle.short,
             required=True
         )
@@ -51,7 +53,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         embed.set_footer(text="Bitte warten, bis alle Spins abgeschlossen sind...")
         await interaction.followup.send(embed=embed)
 
-        rewards = await asyncio.to_thread(spin_lucky_wheel, username, password, spins)
+        await asyncio.to_thread(spin_lucky_wheel, username, password, spins)
 
         embed_done = discord.Embed(
             title="✅ Spins abgeschlossen!",
@@ -60,11 +62,14 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         )
 
         reward_text = ""
-        for name, amount in rewards.items():
-            reward_text += f"**{name}**: {amount}\n"
+        if rewards:
+            reward_text += "**Belohnungen**\n"
+            for name, amount in rewards.items():
+                reward_text += f"• **{name}**: {amount}\n"
+        else:
+            reward_text = "Keine Belohnungen erkannt. ❌"
 
         embed_done.add_field(name="📦 Belohnungen", value=reward_text, inline=False)
-
         await interaction.followup.send(embed=embed_done)
 
 class SpinBot(discord.Client):
@@ -82,25 +87,22 @@ def log(message):
     timestamp = time.strftime("%H:%M:%S")
     print(f"[{timestamp}] {message}")
 
-def spin_lucky_wheel(username, password, spins):
-    rewards = defaultdict(int)
-
-    def parse_reward_message(msg):
-        match = re.search(r"%xt%lws%1%0%(.*)%", msg)
+def parse_reward_message(msg):
+    try:
+        match = re.search(r"%xt%lws%1%0%(.*?)%", msg)
         if not match:
             return
 
-        try:
-            json_str = match.group(1)
-            data = json.loads(json_str)
+        json_str = match.group(1)
+        data = json.loads(json_str)
 
-            for reward in data.get("R", []):
-                rtype = reward[0]
-                rvalue = reward[1]
+        if "R" in data:
+            for entry in data["R"]:
+                typ = entry[0]
+                val = entry[1]
 
-                # Truppen
-                if rtype == "U":
-                    unit_id, amount = rvalue
+                if typ == "U":
+                    unit_id, amount = val
                     if unit_id == 215:
                         rewards["Schildmaid"] += amount
                     elif unit_id == 238:
@@ -109,61 +111,39 @@ def spin_lucky_wheel(username, password, spins):
                         rewards["Beschützer des Nordens"] += amount
                     elif unit_id == 216:
                         rewards["Walküren-Waldläuferin"] += amount
-                    else:
-                        rewards["Werkzeuge"] += amount
-
-                # Konstrukte
-                elif rtype == "CI":
-                    rewards["Konstrukte"] += 1
-
-                # Ausrüstung
-                elif rtype == "RI":
-                    eq = rvalue.get("EQ", [])
-                    gem = rvalue.get("GEM", [])
-                    if eq:
+                    elif amount == 1000:
+                        rewards["Werkzeuge"] += 1
+                elif typ == "RI":
+                    if "EQ" in val:
                         rewards["Ausrüstung"] += 1
-                    elif gem:
-                        rewards["Ausrüstung"] += 1  # Edelstein = Ausrüstung
-
-                # Ausbaumarken
-                elif rtype == "LM":
-                    rewards["Ausbaumarken"] += rvalue
-
-                # Sceattas
-                elif rtype == "STP":
-                    rewards["Sceattas"] += rvalue
-
-                # Ludwig-Geschenke
-                elif rtype == "FKT":
-                    rewards["Geschenke Ludwig"] += rvalue
-
-                # Beatrice
-                elif rtype == "PTK":
-                    rewards["Geschenk Beatrice"] += rvalue
-
-                # Ulrich
-                elif rtype == "KTK":
-                    rewards["Geschenke Ulrich"] += rvalue
-
-                # Kisten
-                elif rtype == "LB":
-                    rewards["Kisten"] += rvalue[1]
-
-                # Mehrweller
-                elif rtype == "UE":
+                    elif "GEM" in val:
+                        rewards["Ausrüstung"] += 1
+                elif typ == "CI":
+                    rewards["Konstrukte"] += 1
+                elif typ == "LM":
+                    rewards["Ausbaumarken"] += val
+                elif typ == "STP":
+                    rewards["Sceattas"] += val
+                elif typ == "LB":
+                    kistenmenge = val[1]
+                    rewards["Kisten"] += kistenmenge
+                elif typ == "UE":
                     rewards["Mehrweller"] += 1
-
-                # Rubine
-                elif rtype == "C2":
-                    rewards["Rubine"] += rvalue
-
-                # Dekorationen
-                elif rtype == "D":
+                elif typ == "C2":
+                    rewards["Rubine"] += val
+                elif typ == "FKT":
+                    rewards["Geschenk Ludwig"] += val
+                elif typ == "PTK":
+                    rewards["Geschenk Beatrice"] += val
+                elif typ == "KTK":
+                    rewards["Geschenk Ulrich"] += val
+                elif typ == "D":
                     rewards["Dekorationen"] += 1
 
-        except Exception as e:
-            log(f"⚠️ Fehler beim Parsen: {e}")
+    except Exception as e:
+        log(f"❌ Fehler beim Parsen: {e}")
 
+def spin_lucky_wheel(username, password, spins):
     try:
         ws = websocket.WebSocket()
         ws.connect("wss://ep-live-de1-game.goodgamestudios.com/")
@@ -187,24 +167,16 @@ def spin_lucky_wheel(username, password, spins):
         for i in range(spins):
             log(f"🎰 Spin {i+1}/{spins}")
             ws.send("%xt%EmpireEx_2%lws%1%{\"LWET\":1}%")
+            msg = ws.recv()
+            print(f"🔍 Empfangen: {msg}")
+            parse_reward_message(msg)
             time.sleep(0.1)
-
-            ws.settimeout(2)
-            try:
-                msg = ws.recv()
-                if isinstance(msg, bytes):
-                    msg = msg.decode("utf-8", errors="ignore")
-                parse_reward_message(msg)
-            except websocket.WebSocketTimeoutException:
-                log("⏱️ Kein Antwort-Paket empfangen!")
 
         log("✅ Alle Spins abgeschlossen!")
         ws.close()
-        return rewards
 
     except Exception as e:
         log(f"❌ Fehler beim Spin-Prozess: {e}")
-        return rewards
 
 @bot.tree.command(name="spin", description="Starte das Glücksrad-Drehen!")
 async def spin(interaction: discord.Interaction):
