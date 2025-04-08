@@ -31,14 +31,14 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         )
         self.password = discord.ui.TextInput(
             label="Passwort",
-            placeholder="Gib dein Passwort (sicher) ein...",
-            style=discord.TextStyle.short, # CORRECTED: Use short style for password
+            placeholder="Gib dein Passwort ein...",
+            style=discord.TextStyle.short,
             required=True,
             max_length=50
         )
         self.spins = discord.ui.TextInput(
             label="Anzahl der Spins",
-            placeholder="Wie oft soll das Rad gedreht werden? (Zahl)",
+            placeholder="Wie oft soll das Rad gedreht werden?",
             style=discord.TextStyle.short,
             required=True,
             max_length=4 # Limit max spins input length
@@ -67,12 +67,12 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
             return
 
         # Send initial confirmations
-        await interaction.response.send_message("🔒 Deine Eingaben wurden sicher verarbeitet! Starte den Prozess...", ephemeral=True)
+        await interaction.response.send_message("🔒 Deine Eingaben wurden sicher verarbeitet! Starte Spins...", ephemeral=True)
 
         embed = discord.Embed(
             title="🎰 SpinBot wird gestartet!",
             description=f"Initialisiere `{spins}` Spin(s) für den Benutzer `{username}`...\n"
-                        f"*Dies kann einen Moment dauern, besonders der Login.*",
+                        f"*Dies kann einen Moment dauern.*",
             color=discord.Color.orange()
         )
         embed.set_footer(text="Bitte habe Geduld, bis alle Spins abgeschlossen sind.")
@@ -86,7 +86,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
             # --- Process results ---
             embed_done = discord.Embed(
                 title="✅ Spins Abgeschlossen!",
-                description=f"Alle `{spins}` angeforderten Spins für `{username}` wurden ausgeführt.",
+                description=f"Alle `{spins}` Spins für `{username}` wurden ausgeführt.",
                 color=discord.Color.green()
             )
 
