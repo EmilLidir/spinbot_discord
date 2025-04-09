@@ -118,9 +118,9 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
                 reward_lines = "\n".join(reward_lines_list)
                 # --- END: Direct Emoji String Mapping ---
 
-                embed_done.add_field(name="🎁 Erhaltene Belohnungen", value=reward_lines, inline=False)
+                embed_done.add_field(name="Erhaltene Belohnungen", value=reward_lines, inline=False)
             else:
-                embed_done.add_field(name="🎁 Erhaltene Belohnungen", value="Keine Belohnungen erkannt oder Prozess vorzeitig beendet.", inline=False)
+                embed_done.add_field(name="Erhaltene Belohnungen", value="Keine Belohnungen erkannt oder Prozess vorzeitig beendet.", inline=False)
                 embed_done.color = discord.Color.gold()
 
             await status_message.edit(embed=embed_done)
