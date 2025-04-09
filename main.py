@@ -357,14 +357,13 @@ def spin_lucky_wheel(username, password, spins):
 
     try:
         log(f"Versuche Verbindung herzustellen (Timeout: {connect_timeout}s)")
-        # --- REVERTED CHANGE 1: Removed the 'header' argument ---
         ws = websocket.create_connection(
             "wss://ep-live-de1-game.goodgamestudios.com/",
             timeout=connect_timeout
         )
         log("✅ WebSocket-Verbindung erfolgreich hergestellt!")
 
-        # --- Login Sequence (Remains the same message sequence as before) ---
+        # --- Login Sequence ---
         log("Sende Login-Sequenz...")
         ws.send("<msg t='sys'><body action='verChk' r='0'><ver v='166' /></body></msg>")
         time.sleep(0.1)
@@ -377,7 +376,7 @@ def spin_lucky_wheel(username, password, spins):
             "LT": None, "LANG": "de", "DID": "0", "AID": "1735403904264644306", "KID": "",
             "REF": "https://empire-html5.goodgamestudios.com", "GCI": "", "SID": 9, "PLFID": 1
         }
-        login_command = f"%xt%EmpireEx_2%lli%1%{json.dumps(login_payload)}%"
+        login_command = f"%xt%EmpireEx_2%lli%1%{{\"CONM\":491,\"RTM\":74,\"ID\":0,\"PL\":1,\"NOM\":\"{username}\",\"PW\":\"{password}\",\"LT\":null,\"LANG\":\"de\",\"DID\":\"0\",\"AID\":\"1735403904264644306\",\"KID\":\"\",\"REF\":\"https://empire-html5.goodgamestudios.com\",\"GCI\":\"\",\"SID\":9,\"PLFID\":1}}%"
         ws.send(login_command)
         log(f"🔐 Anmeldeversuch für '{username}' gesendet.")
 
