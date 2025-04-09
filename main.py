@@ -16,6 +16,12 @@ import traceback # For better error logging
 # Retrieve the bot token from environment variables for security
 TOKEN = os.getenv("DISCORD_TOKEN")
 
+# --- Helper Functions ---
+def log(message):
+    """Simple timestamped logging to console."""
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] {message}")
+
 # --- Discord UI Modal for Input ---
 class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
     """A Discord Modal (form) to collect user credentials and spin count."""
@@ -75,18 +81,14 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
             color=discord.Color.orange()
         )
         embed.set_footer(text="Bitte habe Geduld, bis alle Spins abgeschlossen sind.")
-        # Use followup as response was already sent (ephemeral)
         status_message = await interaction.followup.send(embed=embed, wait=True)
 
         # --- Run the blocking WebSocket task in a separate thread ---
         try:
             # Ensure the client has the app_emojis attribute (from setup_hook)
             if not hasattr(interaction.client, 'app_emojis'):
-                 # Handle case where setup_hook might not have run or failed
                  log("🚨 FATAL in on_submit: interaction.client.app_emojis not found! Setup issue?")
-                 # Set it to empty list to prevent attribute error later, but log severity
-                 interaction.client.app_emojis = []
-                 # Optionally raise an error or inform the user
+                 interaction.client.app_emojis = [] # Set default to prevent attribute error
 
             rewards = await asyncio.to_thread(spin_lucky_wheel, username, password, spins)
 
@@ -99,7 +101,6 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
 
             if rewards:
                 # --- START: Emoji Enhancement Logic (Emoji-Only Display) ---
-
                 emoji_map = {
                     "Schildmaid": "schildmaid",
                     "Beschützer des Nordens": "beschuetzer",
@@ -110,7 +111,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
                     "Ulrich-Geschenke": "ulrich",
                     "Beatrice-Geschenke": "beatrice",
                     "Ludwig-Geschenke": "ludwig",
-                    "Baumarken": "baumarken", # missing message
+                    "Baumarken": "baumarken", #
                     "Ausbaumarken": "ausbaumarken",
                     "Dekorationen": "dekorationen",
                     "Lose": "ticket",
@@ -126,17 +127,14 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
                 app_emojis_to_use = interaction.client.app_emojis
 
                 if not app_emojis_to_use:
-                    # This log indicates setup_hook likely failed or didn't find emojis
                     log("⚠️ Warnung in on_submit: interaction.client.app_emojis ist leer. Fallback auf client.emojis (weniger zuverlässig).")
-                    # Fallback to general client emojis (might include server ones)
-                    app_emojis_to_use = interaction.client.emojis
+                    app_emojis_to_use = interaction.client.emojis # Fallback
 
                 # Iterate through sorted rewards
                 for reward_key, reward_value in sorted(rewards.items()):
-                    found_emoji = None # Reset for each iteration
+                    found_emoji = None
                     if reward_key in emoji_map:
                         emoji_name = emoji_map[reward_key]
-                        # Search for the emoji by name in the determined list
                         found_emoji = discord.utils.get(app_emojis_to_use, name=emoji_name)
 
                         # Optional: If using the fallback, double-check it's an app emoji
@@ -144,20 +142,18 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
                             is_our_app_emoji = getattr(found_emoji, 'application_id', None) == interaction.client.user.id
                             if not is_our_app_emoji:
                                 log(f"⚠️ Warnung: Fallback fand Emoji '{emoji_name}', aber es ist keine Anwendungs-Emoji.")
-                                found_emoji = None # Discard if it's not the specific app emoji
+                                found_emoji = None # Discard if not app emoji
 
-                    # --- APPLIED FORMATTING LOGIC ---
+                    # --- FORMATTING LOGIC ---
                     if found_emoji:
                         # Emoji found: Display EMOJI COUNT
                         reward_lines_list.append(f"{found_emoji} {reward_value:,}")
                     else:
                         # Emoji NOT found OR not mapped: Fallback to **NAME**: COUNT
                         if reward_key in emoji_map and not found_emoji:
-                             # Log only if it was mapped but not found in the list
                              log(f"ℹ️ Anwendungs-Emoji '{emoji_map[reward_key]}' für '{reward_key}' nicht gefunden/geladen. Zeige Namen an.")
-                        # No else needed here, just use the name format
                         reward_lines_list.append(f"**{reward_key}**: {reward_value:,}")
-                    # --- END APPLIED FORMATTING LOGIC ---
+                    # --- END FORMATTING LOGIC ---
 
                 reward_lines = "\n".join(reward_lines_list)
                 # --- END: Emoji Enhancement Logic ---
@@ -165,15 +161,13 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
                 embed_done.add_field(name="🎁 Erhaltene Belohnungen", value=reward_lines, inline=False)
             else:
                 embed_done.add_field(name="🎁 Erhaltene Belohnungen", value="Keine Belohnungen erkannt oder Prozess vorzeitig beendet.", inline=False)
-                embed_done.color = discord.Color.gold() # Indicate potentially incomplete run
+                embed_done.color = discord.Color.gold()
 
-            await status_message.edit(embed=embed_done) # Edit the original status message
+            await status_message.edit(embed=embed_done)
 
         except Exception as e:
-            # --- Handle errors during the spin process ---
-            print(f"Error during spin_lucky_wheel execution for {username}: {e}") # Log to console
-            traceback.print_exc() # Print full traceback to console
-
+            print(f"Error during spin_lucky_wheel execution for {username}: {e}")
+            traceback.print_exc()
             embed_error = discord.Embed(
                 title="❌ Fehler beim Ausführen der Spins!",
                 description=f"Ein Problem ist während der Verarbeitung der Spins für `{username}` aufgetreten.\n"
@@ -181,32 +175,24 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
                             f"Bitte überprüfe die Konsolenlogs des Bots für Details.",
                 color=discord.Color.red()
             )
-            await status_message.edit(embed=embed_error) # Edit status message to show error
+            await status_message.edit(embed=embed_error)
 
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
         """Handles errors originating from the modal interaction itself."""
         print(f"Error in SpinModal interaction: {error}")
         traceback.print_exc()
-        # Use followup because the interaction might already be responded to or deferred
-        if interaction.response.is_done():
-             await interaction.followup.send('Hoppla! Etwas ist beim Öffnen des Formulars schiefgelaufen.', ephemeral=True)
-        else:
-             await interaction.response.send_message('Hoppla! Etwas ist beim Öffnen des Formulars schiefgelaufen.', ephemeral=True)
-
+        resp_func = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+        await resp_func('Hoppla! Etwas ist beim Öffnen des Formulars schiefgelaufen.', ephemeral=True)
 
 # --- Discord Bot Class (Using setup_hook to fetch emojis) ---
 class SpinBot(discord.Client):
     """The main Discord bot client."""
     def __init__(self):
-        # Define necessary intents
         intents = discord.Intents.default()
         intents.message_content = False
-
         super().__init__(intents=intents)
-        # Command Tree for slash commands
         self.tree = app_commands.CommandTree(self)
-        # Variable to specifically store application emojis
-        self.app_emojis: list[discord.Emoji] = [] # Initialize as an empty list
+        self.app_emojis: list[discord.Emoji] = [] # Initialize custom emoji list
 
     async def setup_hook(self):
         """Fetches app info and syncs commands before the bot is ready."""
@@ -214,8 +200,7 @@ class SpinBot(discord.Client):
         # Fetch Application Info and Store Emojis
         try:
             log("   Fetching application information...")
-            # Ensure the client loop is running before fetching
-            await self.wait_until_ready()
+            await self.wait_until_ready() # Wait for basic connection state
             app_info = await self.application_info()
             if app_info and app_info.emojis:
                 self.app_emojis = app_info.emojis
@@ -231,7 +216,6 @@ class SpinBot(discord.Client):
         log("✅ Slash-Befehle synchronisiert.")
         log("✅ setup_hook complete.")
 
-
     async def on_ready(self):
         """Called when the bot successfully connects to Discord."""
         print(f"✅ Bot ist online als {self.user} (ID: {self.user.id})")
@@ -240,37 +224,25 @@ class SpinBot(discord.Client):
              print(f"✅ Explizit geladene Anwendungs-Emojis: {[e.name for e in self.app_emojis]}")
         else:
              print("⚠️ Keine Anwendungs-Emojis explizit in self.app_emojis geladen (siehe setup_hook logs).")
-        # Print all emojis the client sees for comparison
-        # print(f"ℹ️ Gesamt-Emojis im Client-Cache (client.emojis): {[e.name for e in self.emojis]}")
         print(f"✅ Bereit und wartet auf Befehle...")
-
-
-# --- Helper Functions ---
-def log(message):
-    """Simple timestamped logging to console."""
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] {message}")
 
 
 def parse_reward_message(msg, rewards):
     """Parses the specific reward message format from the game server."""
     try:
-        # Target the specific message format for lucky wheel spins
         match = re.search(r"%xt%lws%1%0%(.*)%", msg)
         if not match:
             if msg.startswith("%xt%"):
-                 log(f"ℹ️ Ignoriere Nachricht (passt nicht zum Belohnungsformat %xt%lws%1%0%...): {msg[:80]}...")
+                 # log(f"ℹ️ Ignoriere Nachricht (passt nicht zum Belohnungsformat %xt%lws%1%0%...): {msg[:80]}...") # Keep logs cleaner
+                 pass
             return
 
-        # log(f"🎯 Potentielle Glücksrad-Belohnungsnachricht gefunden: {msg[:100]}...") # Less verbose
         json_str = match.group(1)
         data = json.loads(json_str)
 
         if "R" not in data or not isinstance(data["R"], list):
             log(f"ℹ️ Keine gültige 'R' (Rewards) Liste im geparsten JSON gefunden: {data}")
             return
-
-        # log(f"✨ Verarbeite Belohnungen aus JSON: {data['R']}") # Less verbose
 
         for item in data["R"]:
             if not isinstance(item, list) or len(item) < 2:
@@ -283,22 +255,19 @@ def parse_reward_message(msg, rewards):
             reward_name = None
 
             try:
-                if reward_type == "U": # Truppen oder Werkzeuge
+                # --- Simplified Reward Type Handling ---
+                if reward_type == "U":
                     if isinstance(reward_data, list) and len(reward_data) == 2:
                         unit_id, amount = reward_data
-                        truppen_namen = {
-                            215: "Schildmaid", 238: "Walküren-Scharfschützin",
-                            227: "Beschützer des Nordens", 216: "Walküren-Waldläuferin"
-                        }
-                        reward_name = truppen_namen.get(unit_id, "Werkzeuge") # Use get() for default
+                        truppen_namen = { 215: "Schildmaid", 238: "Walküren-Scharfschützin", 227: "Beschützer des Nordens", 216: "Walküren-Waldläuferin" }
+                        reward_name = truppen_namen.get(unit_id, "Werkzeuge")
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'U': {reward_data}")
-
                 elif reward_type == "RI": amount = 1; reward_name = "Ausrüstung/Edelsteine"
                 elif reward_type == "CI": amount = 1; reward_name = "Konstrukte"
                 elif reward_type == "LM":
                     if isinstance(reward_data, int): amount = reward_data
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'LM': {reward_data}")
-                    reward_name = "Ausbaumarken" # Corrected key? Check emoji map
+                    reward_name = "Ausbaumarken" # Verify this matches emoji map key
                 elif reward_type == "STP":
                     if isinstance(reward_data, int): amount = reward_data
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'STP': {reward_data}")
@@ -339,7 +308,7 @@ def parse_reward_message(msg, rewards):
 
                 if reward_name and amount > 0:
                     rewards[reward_name] += amount
-                    # log(f"  -> Belohnung: {amount:,}x {reward_name}") # Less verbose
+                    # log(f"  -> Belohnung: {amount:,}x {reward_name}") # Keep logs cleaner
 
             except Exception as parse_inner_err:
                 log(f"  ❌ Fehler beim Verarbeiten des Items {item}: {parse_inner_err}")
@@ -352,7 +321,7 @@ def parse_reward_message(msg, rewards):
         traceback.print_exc()
 
 
-# --- Core WebSocket Logic (Reverted Login Sequence Changes) ---
+# --- Core WebSocket Logic (Reverted Login Command Construction) ---
 def spin_lucky_wheel(username, password, spins):
     """Connects, logs in, performs spins, and waits specifically for reward messages."""
     rewards = defaultdict(int)
@@ -377,21 +346,15 @@ def spin_lucky_wheel(username, password, spins):
         time.sleep(0.1)
         ws.send(f"%xt%EmpireEx_2%vln%1%{{\"NOM\":\"{username}\"}}%")
         time.sleep(0.1)
-        # --- IMPORTANT: Corrected login payload structure back to using json.dumps ---
-        login_payload = {
-            "CONM": 491, "RTM": 74, "ID": 0, "PL": 1, "NOM": username, "PW": password,
-            "LT": None, "LANG": "de", "DID": "0", "AID": "1735403904264644306", "KID": "",
-            "REF": "https://empire-html5.goodgamestudios.com", "GCI": "", "SID": 9, "PLFID": 1
-        }
-        # Use json.dumps to correctly format the payload dictionary into a JSON string
-        login_command = f"%xt%EmpireEx_2%lli%1%{json.dumps(login_payload)}%"
-        # --- END CORRECTION ---
+        login_command = f"%xt%EmpireEx_2%lli%1%{{\"CONM\":491,\"RTM\":74,\"ID\":0,\"PL\":1,\"NOM\":\"{username}\",\"PW\":\"{password}\",\"LT\":null,\"LANG\":\"de\",\"DID\":\"0\",\"AID\":\"1735403904264644306\",\"KID\":\"\",\"REF\":\"https://empire-html5.goodgamestudios.com\",\"GCI\":\"\",\"SID\":9,\"PLFID\":1}}%"
+
         ws.send(login_command)
         log(f"🔐 Anmeldeversuch für '{username}' gesendet.")
 
         log(f"⏳ Warte {login_wait_time} Sekunden nach dem Login-Versuch...")
         time.sleep(login_wait_time)
 
+        # Clear buffer
         try:
             ws.settimeout(0.1)
             while True: msg = ws.recv()
@@ -437,7 +400,7 @@ def spin_lucky_wheel(username, password, spins):
                     break
                 except (websocket.WebSocketConnectionClosedException, BrokenPipeError) as conn_err:
                     log(f"❌ [{current_spin}/{spins}] Verbindung geschlossen: {conn_err}. Breche ab.")
-                    raise conn_err
+                    raise conn_err # Re-raise critical connection errors
                 except Exception as recv_err:
                     log(f"⚠️ [{current_spin}/{spins}] Fehler beim Empfangen/Prüfen: {recv_err}")
                     traceback.print_exc(); break
@@ -447,19 +410,22 @@ def spin_lucky_wheel(username, password, spins):
 
         log("✅ Alle angeforderten Spins wurden versucht.")
 
+    # --- Exception Handling ---
     except websocket.WebSocketTimeoutException as e:
         log(f"❌ Connection Timeout ({connect_timeout}s): {e}"); raise ConnectionError("Connection Timeout") from e
     except websocket.WebSocketBadStatusException as e:
          log(f"❌ WebSocket Handshake Failed (Bad Status {e.status_code}): {e.resp_body}"); raise ConnectionError("WebSocket Handshake Failed") from e
     except (websocket.WebSocketConnectionClosedException, BrokenPipeError) as e:
-         log(f"❌ WebSocket Connection Closed Unexpectedly: {e}")
+         log(f"❌ WebSocket Connection Closed Unexpectedly: {e}") # Let process finish to return partial rewards
     except Exception as e:
-        log(f"❌ Schwerwiegender Fehler im spin_lucky_wheel: {e}"); traceback.print_exc(); raise e
+        log(f"❌ Schwerwiegender Fehler im spin_lucky_wheel: {e}"); traceback.print_exc(); raise e # Re-raise other critical errors
     finally:
+        # --- Ensure the WebSocket is closed cleanly ---
         if ws and ws.connected:
-            log("🔌 Schließe WebSocket-Verbindung."); ws.close()
-        # elif ws: log("ℹ️ WebSocket-Verbindung war bereits geschlossen.")
-        # else: log("ℹ️ Keine WebSocket-Verbindung zum Schließen vorhanden.")
+            log("🔌 Schließe WebSocket-Verbindung.");
+            try: ws.close()
+            except Exception as close_err: log(f"⚠️ Fehler beim Schließen der WebSocket-Verbindung: {close_err}")
+        # Logging for already closed or non-existent connection can be omitted for brevity
 
     log(f"Gesammelte Belohnungen: {dict(rewards)}")
     return dict(rewards)
@@ -469,7 +435,7 @@ def spin_lucky_wheel(username, password, spins):
 bot = SpinBot()
 
 @bot.tree.command(name="spin", description="Startet das Glücksrad-Drehen für Goodgame Empire.")
-@app_commands.checks.cooldown(1, 60.0, key=lambda i: i.user.id)
+@app_commands.checks.cooldown(1, 60.0, key=lambda i: i.user.id) # 1 use per 60 sec per user
 async def spin(interaction: discord.Interaction):
     """Slash command handler to initiate the spin process by showing the modal."""
     log(f"Befehl /spin von Benutzer {interaction.user} (ID: {interaction.user.id}) erhalten.")
