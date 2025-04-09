@@ -13,25 +13,49 @@ from collections import defaultdict
 import traceback # For better error logging
 
 # --- Configuration ---
+# Retrieve the bot token from environment variables for security
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 # --- Helper Functions ---
 def log(message):
+    """Simple timestamped logging to console."""
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] {message}")
 
 # --- Discord UI Modal for Input ---
 class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
+    """A Discord Modal (form) to collect user credentials and spin count."""
     def __init__(self):
-        super().__init__(timeout=300)
-        self.username = discord.ui.TextInput(label="Benutzername", placeholder="Gib deinen Empire-Benutzernamen ein...", required=True, style=discord.TextStyle.short, max_length=50)
-        self.password = discord.ui.TextInput(label="Passwort", placeholder="Gib dein Passwort ein...", style=discord.TextStyle.short, required=True, max_length=50)
-        self.spins = discord.ui.TextInput(label="Anzahl der Spins", placeholder="Wie oft soll das Rad gedreht werden?", style=discord.TextStyle.short, required=True, max_length=4)
+        super().__init__(timeout=300) # 5-minute timeout for the modal
+
+        self.username = discord.ui.TextInput(
+            label="Benutzername",
+            placeholder="Gib deinen Empire-Benutzernamen ein...",
+            required=True,
+            style=discord.TextStyle.short,
+            max_length=50
+        )
+        self.password = discord.ui.TextInput(
+            label="Passwort",
+            placeholder="Gib dein Passwort ein...",
+            style=discord.TextStyle.short,
+            required=True,
+            max_length=50
+        )
+        self.spins = discord.ui.TextInput(
+            label="Anzahl der Spins",
+            placeholder="Wie oft soll das Rad gedreht werden?",
+            style=discord.TextStyle.short,
+            required=True,
+            max_length=4 # Limit max spins input length
+        )
+
         self.add_item(self.username)
         self.add_item(self.password)
         self.add_item(self.spins)
 
     async def on_submit(self, interaction: discord.Interaction):
+        """Handles the modal submission."""
         username = self.username.value
         password = self.password.value
         try:
@@ -50,34 +74,50 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
             embed_done = discord.Embed(title="✅ Spins Abgeschlossen!", description=f"Alle `{spins}` Spins für `{username}` wurden ausgeführt.", color=discord.Color.green())
 
             if rewards:
-                emoji_map = { "Schildmaid": "schildmaid", "Beschützer des Nordens": "beschuetzer", "Walküren-Scharfschützin": "scharfschuetzin", "Walküren-Waldläuferin": "waldlaeuferin", "Konstrukte": "konstrukte", "Mehrweller": "mehrweller", "Ulrich-Geschenke": "ulrich", "Beatrice-Geschenke": "beatrice", "Ludwig-Geschenke": "ludwig", "Baumarken": "baumarken", "Ausbaumarken": "ausbaumarken", "Dekorationen": "dekorationen", "Lose": "ticket", "Rubine": "ruby", "Kisten": "chest", "Werkzeuge": "tools", "Sceattas": "sceatta", "Ausrüstung/Edelsteine": "gear" }
+                # --- START: Direct Emoji String Mapping ---
+
+                # 1. Define the mapping using the full emoji strings from the Dev Portal image
+                direct_emoji_map = {
+                    "Werkzeuge": "<:tools:1359522120509554922>",
+                    "Ausrüstung/Edelsteine": "<:gear:1359518850713911488>", # Key matches parser output for RI
+                    "Konstrukte": "<:konstrukte:1359518720531235047>",
+                    "Kisten": "<:chest:1359518414154104974>",
+                    "Dekorationen": "<:dekorationen:1359518108900917359>",
+                    "Mehrweller": "<:mehrweller:1359517882064699483>",
+                    "Sceattas": "<:sceatta:135951737066438747>", # Key matches parser output for STP
+                    "Beatrice-Geschenke": "<:beatrice:1359517272640721170>", # Key matches parser output for PTK
+                    "Ulrich-Geschenke": "<:ulrich:1359516848474820789>", # Key matches parser output for KTK
+                    "Ludwig-Geschenke": "<:ludwig:1359516694716092416>", # Key matches parser output for FKT
+                    # "Baumarken": "<:baumarken:1359516243463373030>", # Parser generates "Ausbaumarken" for LM type.
+                    "Ausbaumarken": "<:ausbaumarken:1359516063472686222>", # Key matches parser output for LM
+                    "Rubine": "<:ruby:1359515929517318112>", # Key matches parser output for C2
+                    "Lose": "<:ticket:1359508197429219501>", # Key matches parser output for SLWT
+                    "Beschützer des Nordens": "<:beschuetzer:1359481568430915765>", # Key matches parser output for U troop
+                    "Schildmaid": "<:schildmaid:1359479372041683015>", # Key matches parser output for U troop
+                    "Walküren-Scharfschützin": "<:scharfschuetzin:1359477765421793422>", # Key matches parser output for U troop
+                    "Walküren-Waldläuferin": "<:waldlaeuferin:1359477735856013576>" # Key matches parser output for U troop
+                }
+
                 reward_lines_list = []
-                # --- MODIFIED: Use client.emojis directly and filter it ---
-                all_client_emojis = interaction.client.emojis
-                bot_app_id = interaction.client.user.id
 
-                # Filter the main list to get potential app emojis
-                possible_app_emojis = [emoji for emoji in all_client_emojis if getattr(emoji, 'application_id', None) == bot_app_id]
-                log(f"ℹ️ In on_submit: Found {len(possible_app_emojis)} potential app emojis by filtering client.emojis.")
-
-                # Iterate through sorted rewards
+                # 2. Iterate through sorted rewards and use the direct map
                 for reward_key, reward_value in sorted(rewards.items()):
-                    found_emoji_obj = None # Use a different name to avoid confusion
-                    if reward_key in emoji_map:
-                        emoji_name = emoji_map[reward_key]
-                        # Search within the filtered list
-                        found_emoji_obj = discord.utils.get(possible_app_emojis, name=emoji_name)
+                    # Try to get the pre-formatted emoji string from the map
+                    emoji_string = direct_emoji_map.get(reward_key) # Use .get() for safe lookup
 
                     # --- FORMATTING LOGIC ---
-                    if found_emoji_obj:
-                        reward_lines_list.append(f"{found_emoji_obj} {reward_value:,}")
+                    if emoji_string:
+                        # Emoji string found in map: Display EMOJI COUNT
+                        reward_lines_list.append(f"{emoji_string} {reward_value:,}")
                     else:
-                        # Fallback to **NAME**: COUNT
-                        if reward_key in emoji_map: # Log only if it was mapped but not found in the filtered list
-                             log(f"ℹ️ Anwendungs-Emoji '{emoji_map[reward_key]}' für '{reward_key}' nicht in gefilterter Liste gefunden. Zeige Namen an.")
+                        # Emoji string NOT found in map: Fallback to **NAME**: COUNT
+                        log(f"ℹ️ Kein direkter Emoji-String für '{reward_key}' in der Map gefunden. Zeige Namen an.")
                         reward_lines_list.append(f"**{reward_key}**: {reward_value:,}")
+                    # --- END FORMATTING LOGIC ---
 
                 reward_lines = "\n".join(reward_lines_list)
+                # --- END: Direct Emoji String Mapping ---
+
                 embed_done.add_field(name="🎁 Erhaltene Belohnungen", value=reward_lines, inline=False)
             else:
                 embed_done.add_field(name="🎁 Erhaltene Belohnungen", value="Keine Belohnungen erkannt oder Prozess vorzeitig beendet.", inline=False)
@@ -102,12 +142,12 @@ class SpinBot(discord.Client):
         intents.message_content = False
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
-        # Removed self.app_emojis instance variable
+        # No need for self.app_emojis with the direct map approach
 
     async def setup_hook(self):
         """Syncs commands before the bot is ready."""
         log("🔌 Running setup_hook...")
-        # Removed the application_info fetching logic
+        # No need to fetch application_info here for emojis
         log("   Syncing slash commands...")
         try:
             await self.tree.sync()
@@ -120,8 +160,8 @@ class SpinBot(discord.Client):
     async def on_ready(self):
         """Called when the bot successfully connects to Discord."""
         print(f"✅ Bot ist online als {self.user} (ID: {self.user.id})")
-        # Log the general emoji cache content - this *should* include app emojis when ready
-        print(f"✅ Gesamt-Emojis im Client-Cache (self.emojis): {[e.name for e in self.emojis]}")
+        # Logging the general emoji cache might still be useful for debugging other issues
+        # print(f"✅ Gesamt-Emojis im Client-Cache (self.emojis): {[e.name for e in self.emojis]}")
         print(f"✅ Bereit und wartet auf Befehle...")
 
 
