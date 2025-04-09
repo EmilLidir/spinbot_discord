@@ -111,7 +111,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
                     "Ulrich-Geschenke": "ulrich",
                     "Beatrice-Geschenke": "beatrice",
                     "Ludwig-Geschenke": "ludwig",
-                    "Baumarken": "baumarken", #
+                    "Baumarken": "baumarken", # Ensure parser uses this key if needed
                     "Ausbaumarken": "ausbaumarken",
                     "Dekorationen": "dekorationen",
                     "Lose": "ticket",
@@ -120,6 +120,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
                     "Werkzeuge": "tools",
                     "Sceattas": "sceatta",
                     "Ausrüstung/Edelsteine": "gear",
+                    # Add more mappings here for any other rewards + emojis
                 }
 
                 reward_lines_list = []
@@ -184,7 +185,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         resp_func = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
         await resp_func('Hoppla! Etwas ist beim Öffnen des Formulars schiefgelaufen.', ephemeral=True)
 
-# --- Discord Bot Class (Using setup_hook to fetch emojis) ---
+# --- Discord Bot Class (Fixed setup_hook) ---
 class SpinBot(discord.Client):
     """The main Discord bot client."""
     def __init__(self):
@@ -200,21 +201,32 @@ class SpinBot(discord.Client):
         # Fetch Application Info and Store Emojis
         try:
             log("   Fetching application information...")
-            await self.wait_until_ready() # Wait for basic connection state
+            # Removed await self.wait_until_ready() which caused deadlock
             app_info = await self.application_info()
+            log("   Application information fetched.") # Log after call
+
             if app_info and app_info.emojis:
                 self.app_emojis = app_info.emojis
                 log(f"   ✅ Successfully fetched {len(self.app_emojis)} application emojis.")
             else:
                 log("   ⚠️ Application info or emojis not found after fetch.")
+                self.app_emojis = [] # Ensure it's an empty list
         except Exception as e:
             log(f"   ❌ Error fetching application info in setup_hook: {e}")
             traceback.print_exc()
+            self.app_emojis = [] # Ensure it's an empty list on error
 
+        # Proceed with syncing commands
         log("   Syncing slash commands...")
-        await self.tree.sync()
-        log("✅ Slash-Befehle synchronisiert.")
+        try:
+            await self.tree.sync()
+            log("✅ Slash-Befehle synchronisiert.")
+        except Exception as e:
+            log(f"   ❌ Error syncing commands in setup_hook: {e}")
+            traceback.print_exc()
+
         log("✅ setup_hook complete.")
+
 
     async def on_ready(self):
         """Called when the bot successfully connects to Discord."""
@@ -233,8 +245,7 @@ def parse_reward_message(msg, rewards):
         match = re.search(r"%xt%lws%1%0%(.*)%", msg)
         if not match:
             if msg.startswith("%xt%"):
-                 # log(f"ℹ️ Ignoriere Nachricht (passt nicht zum Belohnungsformat %xt%lws%1%0%...): {msg[:80]}...") # Keep logs cleaner
-                 pass
+                 pass # Keep logs cleaner
             return
 
         json_str = match.group(1)
@@ -267,7 +278,7 @@ def parse_reward_message(msg, rewards):
                 elif reward_type == "LM":
                     if isinstance(reward_data, int): amount = reward_data
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'LM': {reward_data}")
-                    reward_name = "Ausbaumarken" # Verify this matches emoji map key
+                    reward_name = "Ausbaumarken"
                 elif reward_type == "STP":
                     if isinstance(reward_data, int): amount = reward_data
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'STP': {reward_data}")
@@ -308,7 +319,6 @@ def parse_reward_message(msg, rewards):
 
                 if reward_name and amount > 0:
                     rewards[reward_name] += amount
-                    # log(f"  -> Belohnung: {amount:,}x {reward_name}") # Keep logs cleaner
 
             except Exception as parse_inner_err:
                 log(f"  ❌ Fehler beim Verarbeiten des Items {item}: {parse_inner_err}")
@@ -346,6 +356,8 @@ def spin_lucky_wheel(username, password, spins):
         time.sleep(0.1)
         ws.send(f"%xt%EmpireEx_2%vln%1%{{\"NOM\":\"{username}\"}}%")
         time.sleep(0.1)
+
+        # Using the hardcoded JSON string format for the login command as requested
         login_command = f"%xt%EmpireEx_2%lli%1%{{\"CONM\":491,\"RTM\":74,\"ID\":0,\"PL\":1,\"NOM\":\"{username}\",\"PW\":\"{password}\",\"LT\":null,\"LANG\":\"de\",\"DID\":\"0\",\"AID\":\"1735403904264644306\",\"KID\":\"\",\"REF\":\"https://empire-html5.goodgamestudios.com\",\"GCI\":\"\",\"SID\":9,\"PLFID\":1}}%"
 
         ws.send(login_command)
@@ -365,20 +377,17 @@ def spin_lucky_wheel(username, password, spins):
         log("🚀 Beginne mit den Glücksrad-Spins...")
         for i in range(spins):
             current_spin = i + 1
-            # log(f"🎰 [{current_spin}/{spins}] Bereite Spin vor...") # Less verbose
             time.sleep(spin_send_delay)
 
             spin_command = "%xt%EmpireEx_2%lws%1%{\"LWET\":1}%"
             try:
                 ws.send(spin_command)
-                # log(f"-> Befehl für Spin {current_spin} gesendet.") # Less verbose
             except Exception as send_err:
                 log(f"❌ Fehler beim Senden des Spin-Befehls {current_spin}: {send_err}. Breche ab.")
                 traceback.print_exc(); break
 
             spin_reward_found = False
             search_start_time = time.time()
-            # log(f"👂 [{current_spin}/{spins}] Warte auf Belohnungsnachricht (max {receive_timeout_per_spin}s)...") # Less verbose
 
             while time.time() - search_start_time < receive_timeout_per_spin:
                 try:
@@ -391,8 +400,6 @@ def spin_lucky_wheel(username, password, spins):
                         log(f"🎯 [{current_spin}/{spins}] Passende Belohnungsnachricht gefunden!")
                         parse_reward_message(msg, rewards)
                         spin_reward_found = True; break
-                    # else: # Don't log every ignored message unless debugging
-                        # if msg.startswith("%xt%"): log(f"🌀 [{current_spin}/{spins}] Ignoriere Nachricht: {msg[:80]}...")
 
                 except (websocket.WebSocketTimeoutException, TimeoutError):
                     if not (time.time() - search_start_time < receive_timeout_per_spin):
@@ -425,7 +432,6 @@ def spin_lucky_wheel(username, password, spins):
             log("🔌 Schließe WebSocket-Verbindung.");
             try: ws.close()
             except Exception as close_err: log(f"⚠️ Fehler beim Schließen der WebSocket-Verbindung: {close_err}")
-        # Logging for already closed or non-existent connection can be omitted for brevity
 
     log(f"Gesammelte Belohnungen: {dict(rewards)}")
     return dict(rewards)
