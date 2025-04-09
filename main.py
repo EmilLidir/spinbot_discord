@@ -196,7 +196,9 @@ class SpinBot(discord.Client):
     async def on_ready(self):
         """Called when the bot successfully connects to Discord."""
         print(f"✅ Bot ist online als {self.user} (ID: {self.user.id})")
-        print(f"✅ Eigene Emojis: {[e.name for e in self.fetch_application_emojis]}") # Log loaded application emojis
+        # --- ADD THIS LINE ---
+        print(f"✅ Geladene Anwendungs-Emojis: {[e.name for e in self.emojis]}")
+        # --- END OF ADDED LINE ---
         print(f"✅ Bereit und wartet auf Befehle...")
 
 
