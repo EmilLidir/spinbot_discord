@@ -117,28 +117,33 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
                 }
 
                 reward_lines_list = []
-                # 2. Get the list of ALL emojis the bot client can see/use
-                #    This includes its own application-owned emojis.
                 client_emojis = interaction.client.emojis
+                bot_app_id = interaction.client.user.id # Or fetch via application_info if needed, but this usually works
 
-                # 3. Iterate through sorted rewards and format lines
+                # 3. Filter client_emojis to get ONLY the bot's own application emojis
+                #    Application emojis often have an application_id attribute matching the bot's ID
+                #    Or sometimes is_managed() can help, but application_id is more specific
+                #    Note: This filtering might need adjustment based on discord.py version behavior
+                app_only_emojis = [emoji for emoji in client_emojis if getattr(emoji, 'application_id', None) == bot_app_id]
+
+                if not app_only_emojis:
+                    log("⚠️ Warnung: Konnte keine Anwendungs-Emojis im Client-Cache finden. Wurden sie korrekt geladen?")
+                    # Fallback: Attempt search in all client emojis just in case filtering failed
+                    app_only_emojis = client_emojis
+
+                # 4. Iterate through sorted rewards and format lines using the filtered list
                 for reward_key, reward_value in sorted(rewards.items()):
                     emoji_str = "" # Default: no emoji prefix
                     if reward_key in emoji_map:
                         emoji_name = emoji_map[reward_key]
-                        # Find the emoji object by name within all accessible emojis
-                        # This will find your application-owned emojis if the names match.
-                        found_emoji = discord.utils.get(client_emojis, name=emoji_name)
+                        # Find the emoji object BY NAME within the BOT'S OWN EMOJIS
+                        found_emoji = discord.utils.get(app_only_emojis, name=emoji_name)
                         if found_emoji:
-                            # If found, use it! It automatically converts to <:name:id> string
-                            emoji_str = f"{found_emoji} " # Add space after emoji
+                            emoji_str = f"{found_emoji} "
                         else:
-                             # Optional: Log if an expected application emoji wasn't found
-                             # This helps debug if you mistyped a name in the map or the portal
-                             log(f"⚠️ Warnung: Anwendungs-Emoji '{emoji_name}' nicht gefunden für Belohnung '{reward_key}'.")
+                            # Log if mapped emoji wasn't found in the bot's list
+                            log(f"⚠️ Warnung: Anwendungs-Emoji '{emoji_name}' nicht in der gefilterten Liste gefunden für Belohnung '{reward_key}'.")
 
-                    # Format the line: Use emoji if found, otherwise just the key
-                    # Use f-string for number formatting with comma separators
                     reward_lines_list.append(f"{emoji_str}**{reward_key}**: {reward_value:,}")
 
                 reward_lines = "\n".join(reward_lines_list)
