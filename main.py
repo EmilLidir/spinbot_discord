@@ -80,6 +80,14 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
 
         # --- Run the blocking WebSocket task in a separate thread ---
         try:
+            # Ensure the client has the app_emojis attribute (from setup_hook)
+            if not hasattr(interaction.client, 'app_emojis'):
+                 # Handle case where setup_hook might not have run or failed
+                 log("🚨 FATAL in on_submit: interaction.client.app_emojis not found! Setup issue?")
+                 # Set it to empty list to prevent attribute error later, but log severity
+                 interaction.client.app_emojis = []
+                 # Optionally raise an error or inform the user
+
             rewards = await asyncio.to_thread(spin_lucky_wheel, username, password, spins)
 
             # --- Process results ---
@@ -90,11 +98,8 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
             )
 
             if rewards:
-                # --- START: Emoji Enhancement Logic (Using Application Emojis) ---
+                # --- START: Emoji Enhancement Logic (Emoji-Only Display) ---
 
-                # 1. Define the mapping from reward key (string) to emoji name (string)
-                #    Make sure these keys EXACTLY match the keys generated in parse_reward_message
-                #    Make sure the emoji names EXACTLY match the names you gave them in Discord Developer Portal -> Emojis
                 emoji_map = {
                     "Schildmaid": "schildmaid",
                     "Beschützer des Nordens": "beschuetzer",
@@ -105,11 +110,11 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
                     "Ulrich-Geschenke": "ulrich",
                     "Beatrice-Geschenke": "beatrice",
                     "Ludwig-Geschenke": "ludwig",
-                    "Baumarken": "baumarken",
+                    "Baumarken": "baumarken", # missing message
                     "Ausbaumarken": "ausbaumarken",
                     "Dekorationen": "dekorationen",
                     "Lose": "ticket",
-                    "Rubine": "ruby", 
+                    "Rubine": "ruby",
                     "Kisten": "chest",
                     "Werkzeuge": "tools",
                     "Sceattas": "sceatta",
@@ -117,34 +122,42 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
                 }
 
                 reward_lines_list = []
-                client_emojis = interaction.client.emojis
-                bot_app_id = interaction.client.user.id # Or fetch via application_info if needed, but this usually works
+                # Use the stored list from the client instance populated in setup_hook
+                app_emojis_to_use = interaction.client.app_emojis
 
-                # 3. Filter client_emojis to get ONLY the bot's own application emojis
-                #    Application emojis often have an application_id attribute matching the bot's ID
-                #    Or sometimes is_managed() can help, but application_id is more specific
-                #    Note: This filtering might need adjustment based on discord.py version behavior
-                app_only_emojis = [emoji for emoji in client_emojis if getattr(emoji, 'application_id', None) == bot_app_id]
+                if not app_emojis_to_use:
+                    # This log indicates setup_hook likely failed or didn't find emojis
+                    log("⚠️ Warnung in on_submit: interaction.client.app_emojis ist leer. Fallback auf client.emojis (weniger zuverlässig).")
+                    # Fallback to general client emojis (might include server ones)
+                    app_emojis_to_use = interaction.client.emojis
 
-                if not app_only_emojis:
-                    log("⚠️ Warnung: Konnte keine Anwendungs-Emojis im Client-Cache finden. Wurden sie korrekt geladen?")
-                    # Fallback: Attempt search in all client emojis just in case filtering failed
-                    app_only_emojis = client_emojis
-
-                # 4. Iterate through sorted rewards and format lines using the filtered list
+                # Iterate through sorted rewards
                 for reward_key, reward_value in sorted(rewards.items()):
-                    emoji_str = "" # Default: no emoji prefix
+                    found_emoji = None # Reset for each iteration
                     if reward_key in emoji_map:
                         emoji_name = emoji_map[reward_key]
-                        # Find the emoji object BY NAME within the BOT'S OWN EMOJIS
-                        found_emoji = discord.utils.get(app_only_emojis, name=emoji_name)
-                        if found_emoji:
-                            emoji_str = f"{found_emoji} "
-                        else:
-                            # Log if mapped emoji wasn't found in the bot's list
-                            log(f"⚠️ Warnung: Anwendungs-Emoji '{emoji_name}' nicht in der gefilterten Liste gefunden für Belohnung '{reward_key}'.")
+                        # Search for the emoji by name in the determined list
+                        found_emoji = discord.utils.get(app_emojis_to_use, name=emoji_name)
 
-                    reward_lines_list.append(f"{emoji_str}**{reward_key}**: {reward_value:,}")
+                        # Optional: If using the fallback, double-check it's an app emoji
+                        if found_emoji and app_emojis_to_use is interaction.client.emojis:
+                            is_our_app_emoji = getattr(found_emoji, 'application_id', None) == interaction.client.user.id
+                            if not is_our_app_emoji:
+                                log(f"⚠️ Warnung: Fallback fand Emoji '{emoji_name}', aber es ist keine Anwendungs-Emoji.")
+                                found_emoji = None # Discard if it's not the specific app emoji
+
+                    # --- APPLIED FORMATTING LOGIC ---
+                    if found_emoji:
+                        # Emoji found: Display EMOJI COUNT
+                        reward_lines_list.append(f"{found_emoji} {reward_value:,}")
+                    else:
+                        # Emoji NOT found OR not mapped: Fallback to **NAME**: COUNT
+                        if reward_key in emoji_map and not found_emoji:
+                             # Log only if it was mapped but not found in the list
+                             log(f"ℹ️ Anwendungs-Emoji '{emoji_map[reward_key]}' für '{reward_key}' nicht gefunden/geladen. Zeige Namen an.")
+                        # No else needed here, just use the name format
+                        reward_lines_list.append(f"**{reward_key}**: {reward_value:,}")
+                    # --- END APPLIED FORMATTING LOGIC ---
 
                 reward_lines = "\n".join(reward_lines_list)
                 # --- END: Emoji Enhancement Logic ---
@@ -180,30 +193,55 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         else:
              await interaction.response.send_message('Hoppla! Etwas ist beim Öffnen des Formulars schiefgelaufen.', ephemeral=True)
 
-# --- Discord Bot Class ---
+
+# --- Discord Bot Class (Using setup_hook to fetch emojis) ---
 class SpinBot(discord.Client):
     """The main Discord bot client."""
     def __init__(self):
         # Define necessary intents
         intents = discord.Intents.default()
-        # No special intents needed for slash commands + reading client emojis
         intents.message_content = False
 
         super().__init__(intents=intents)
         # Command Tree for slash commands
         self.tree = app_commands.CommandTree(self)
+        # Variable to specifically store application emojis
+        self.app_emojis: list[discord.Emoji] = [] # Initialize as an empty list
 
     async def setup_hook(self):
-        """Syncs slash commands when the bot is ready."""
+        """Fetches app info and syncs commands before the bot is ready."""
+        log("🔌 Running setup_hook...")
+        # Fetch Application Info and Store Emojis
+        try:
+            log("   Fetching application information...")
+            # Ensure the client loop is running before fetching
+            await self.wait_until_ready()
+            app_info = await self.application_info()
+            if app_info and app_info.emojis:
+                self.app_emojis = app_info.emojis
+                log(f"   ✅ Successfully fetched {len(self.app_emojis)} application emojis.")
+            else:
+                log("   ⚠️ Application info or emojis not found after fetch.")
+        except Exception as e:
+            log(f"   ❌ Error fetching application info in setup_hook: {e}")
+            traceback.print_exc()
+
+        log("   Syncing slash commands...")
         await self.tree.sync()
-        print(f"✅ Slash-Befehle synchronisiert.")
+        log("✅ Slash-Befehle synchronisiert.")
+        log("✅ setup_hook complete.")
+
 
     async def on_ready(self):
         """Called when the bot successfully connects to Discord."""
         print(f"✅ Bot ist online als {self.user} (ID: {self.user.id})")
-        # --- ADD THIS LINE ---
-        print(f"✅ Geladene Anwendungs-Emojis: {[e.name for e in self.emojis]}")
-        # --- END OF ADDED LINE ---
+        # Print from the stored list fetched in setup_hook
+        if self.app_emojis:
+             print(f"✅ Explizit geladene Anwendungs-Emojis: {[e.name for e in self.app_emojis]}")
+        else:
+             print("⚠️ Keine Anwendungs-Emojis explizit in self.app_emojis geladen (siehe setup_hook logs).")
+        # Print all emojis the client sees for comparison
+        # print(f"ℹ️ Gesamt-Emojis im Client-Cache (client.emojis): {[e.name for e in self.emojis]}")
         print(f"✅ Bereit und wartet auf Befehle...")
 
 
@@ -220,31 +258,27 @@ def parse_reward_message(msg, rewards):
         # Target the specific message format for lucky wheel spins
         match = re.search(r"%xt%lws%1%0%(.*)%", msg)
         if not match:
-            # Optional: Log other %xt% messages if needed for debugging, but keep it minimal
             if msg.startswith("%xt%"):
                  log(f"ℹ️ Ignoriere Nachricht (passt nicht zum Belohnungsformat %xt%lws%1%0%...): {msg[:80]}...")
             return
 
-        log(f"🎯 Potentielle Glücksrad-Belohnungsnachricht gefunden: {msg[:100]}...")
+        # log(f"🎯 Potentielle Glücksrad-Belohnungsnachricht gefunden: {msg[:100]}...") # Less verbose
         json_str = match.group(1)
         data = json.loads(json_str)
 
-        # Structure expected: {"R":[["TYPE", DATA], ["TYPE", DATA], ...], ...other keys...}
         if "R" not in data or not isinstance(data["R"], list):
             log(f"ℹ️ Keine gültige 'R' (Rewards) Liste im geparsten JSON gefunden: {data}")
             return
 
-        log(f"✨ Verarbeite Belohnungen aus JSON: {data['R']}")
+        # log(f"✨ Verarbeite Belohnungen aus JSON: {data['R']}") # Less verbose
 
         for item in data["R"]:
             if not isinstance(item, list) or len(item) < 2:
                 log(f"  ⚠️ Überspringe ungültiges Belohnungsitem-Format: {item}")
                 continue
 
-            reward_type = item[0]    # e.g., "U", "RI", "STP"
-            reward_data = item[1]    # e.g., [215, 1500] or 100 or 1
-
-            # --- Reward Type Handling (using defaultdict automatically initializes keys to 0) ---
+            reward_type = item[0]
+            reward_data = item[1]
             amount = 0
             reward_name = None
 
@@ -256,91 +290,60 @@ def parse_reward_message(msg, rewards):
                             215: "Schildmaid", 238: "Walküren-Scharfschützin",
                             227: "Beschützer des Nordens", 216: "Walküren-Waldläuferin"
                         }
-                        if unit_id in truppen_namen:
-                            reward_name = truppen_namen[unit_id]
-                        else: # Assume Werkzeuge if ID not in troop map
-                            reward_name = "Werkzeuge"
+                        reward_name = truppen_namen.get(unit_id, "Werkzeuge") # Use get() for default
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'U': {reward_data}")
 
-                elif reward_type == "RI": # Ausrüstung oder Edelsteine
-                    amount = 1 # Usually just one item
-                    reward_name = "Ausrüstung/Edelsteine"
-
-                elif reward_type == "CI": # Konstrukt
-                    amount = 1
-                    reward_name = "Konstrukte"
-
-                elif reward_type == "LM": # Ausbaumarken
+                elif reward_type == "RI": amount = 1; reward_name = "Ausrüstung/Edelsteine"
+                elif reward_type == "CI": amount = 1; reward_name = "Konstrukte"
+                elif reward_type == "LM":
                     if isinstance(reward_data, int): amount = reward_data
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'LM': {reward_data}")
-                    reward_name = "Ausbaumarken"
-
-                elif reward_type == "STP": # Sceattas (Event Währung?)
+                    reward_name = "Ausbaumarken" # Corrected key? Check emoji map
+                elif reward_type == "STP":
                     if isinstance(reward_data, int): amount = reward_data
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'STP': {reward_data}")
                     reward_name = "Sceattas"
-
-                elif reward_type == "SLWT": # Ticket
-                     if isinstance(reward_data, int): amount = reward_data
-                     else: log(f"  ⚠️ Ungültiges Format für Typ 'SLWT': {reward_data}")
-                     reward_name = "Lose"
-
-                elif reward_type == "LB": # Kisten
-                    # Sometimes format is ["LB", [box_id, amount]], sometimes just amount?
-                    if isinstance(reward_data, list) and len(reward_data) > 1 and isinstance(reward_data[1], int):
-                         amount = reward_data[1]
-                    elif isinstance(reward_data, int): # Fallback if just amount is given
-                         amount = reward_data
-                    else: # Default to 1 if format is unexpected
-                         amount = 1
-                         log(f"  ⚠️ Ungewöhnliches Format für Typ 'LB', nehme Menge 1 an: {reward_data}")
+                elif reward_type == "SLWT":
+                    if isinstance(reward_data, int): amount = reward_data
+                    else: amount = 1; log(f"  ⚠️ Ungültiges/Kein Mengenformat für Typ 'SLWT', nehme 1 an: {reward_data}")
+                    reward_name = "Lose"
+                elif reward_type == "LB":
+                    if isinstance(reward_data, list) and len(reward_data) > 1 and isinstance(reward_data[1], int): amount = reward_data[1]
+                    elif isinstance(reward_data, int): amount = reward_data
+                    else: amount = 1; log(f"  ⚠️ Ungewöhnliches Format für Typ 'LB', nehme Menge 1 an: {reward_data}")
                     reward_name = "Kisten"
-
-                elif reward_type == "UE": # Mehrweller
-                    amount = 1
-                    reward_name = "Mehrweller"
-
-                elif reward_type == "C2": # Rubine
+                elif reward_type == "UE": amount = 1; reward_name = "Mehrweller"
+                elif reward_type == "C2":
                     if isinstance(reward_data, int): amount = reward_data
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'C2': {reward_data}")
                     reward_name = "Rubine"
-
-                elif reward_type == "FKT": # Ludwig-Geschenke
+                elif reward_type == "FKT":
                     if isinstance(reward_data, int): amount = reward_data
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'FKT': {reward_data}")
                     reward_name = "Ludwig-Geschenke"
-
-                elif reward_type == "PTK": # Beatrice-Geschenke
+                elif reward_type == "PTK":
                     if isinstance(reward_data, int): amount = reward_data
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'PTK': {reward_data}")
                     reward_name = "Beatrice-Geschenke"
-
-                elif reward_type == "KTK": # Ulrich-Geschenke
+                elif reward_type == "KTK":
                     if isinstance(reward_data, int): amount = reward_data
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'KTK': {reward_data}")
                     reward_name = "Ulrich-Geschenke"
-
-                elif reward_type == "D": # Dekorationen
-                    amount = 1
-                    reward_name = "Dekorationen"
-
+                elif reward_type == "D": amount = 1; reward_name = "Dekorationen"
                 else: # Handle unknown types
-                    # Try to guess amount
                     if isinstance(reward_data, int): amount = reward_data
                     elif isinstance(reward_data, list) and len(reward_data) > 1 and isinstance(reward_data[1], int): amount = reward_data[1]
-                    else: amount = 1 # Default to 1 if unsure
+                    else: amount = 1
                     reward_name = f"Unbekannt_{reward_type}"
                     log(f"  -> Unbekannter Belohnungstyp: {reward_type} mit Daten {reward_data}. Gezählt als '{reward_name}'.")
 
-                # Add to rewards if valid name and amount found
                 if reward_name and amount > 0:
                     rewards[reward_name] += amount
-                    log(f"  -> Belohnung: {amount:,}x {reward_name}")
+                    # log(f"  -> Belohnung: {amount:,}x {reward_name}") # Less verbose
 
             except Exception as parse_inner_err:
                 log(f"  ❌ Fehler beim Verarbeiten des Items {item}: {parse_inner_err}")
-                traceback.print_exc(limit=1) # Log traceback for this specific item error
-
+                traceback.print_exc(limit=1)
 
     except json.JSONDecodeError as e:
         log(f"❌ Fehler beim JSON-Parsen des extrahierten Strings '{json_str}': {e}")
@@ -354,13 +357,10 @@ def spin_lucky_wheel(username, password, spins):
     """Connects, logs in, performs spins, and waits specifically for reward messages."""
     rewards = defaultdict(int)
     ws = None
-
-    # --- Timeouts and Delays ---
     connect_timeout = 20.0
-    login_wait_time = 5.0 # Still wait a bit after login seems successful
-    # Timeout *per spin* to wait for the specific reward message
-    receive_timeout_per_spin = 15.0 # seconds (Increase if rewards sometimes take longer)
-    spin_send_delay = 0.3 # Small delay before sending next spin command
+    login_wait_time = 5.0
+    receive_timeout_per_spin = 15.0
+    spin_send_delay = 0.3
 
     try:
         log(f"Versuche Verbindung herzustellen (Timeout: {connect_timeout}s)")
@@ -370,7 +370,6 @@ def spin_lucky_wheel(username, password, spins):
         )
         log("✅ WebSocket-Verbindung erfolgreich hergestellt!")
 
-        # --- Login Sequence ---
         log("Sende Login-Sequenz...")
         ws.send("<msg t='sys'><body action='verChk' r='0'><ver v='166' /></body></msg>")
         time.sleep(0.1)
@@ -378,116 +377,89 @@ def spin_lucky_wheel(username, password, spins):
         time.sleep(0.1)
         ws.send(f"%xt%EmpireEx_2%vln%1%{{\"NOM\":\"{username}\"}}%")
         time.sleep(0.1)
+        # --- IMPORTANT: Corrected login payload structure back to using json.dumps ---
         login_payload = {
             "CONM": 491, "RTM": 74, "ID": 0, "PL": 1, "NOM": username, "PW": password,
             "LT": None, "LANG": "de", "DID": "0", "AID": "1735403904264644306", "KID": "",
             "REF": "https://empire-html5.goodgamestudios.com", "GCI": "", "SID": 9, "PLFID": 1
         }
-        login_command = f"%xt%EmpireEx_2%lli%1%{{\"CONM\":491,\"RTM\":74,\"ID\":0,\"PL\":1,\"NOM\":\"{username}\",\"PW\":\"{password}\",\"LT\":null,\"LANG\":\"de\",\"DID\":\"0\",\"AID\":\"1735403904264644306\",\"KID\":\"\",\"REF\":\"https://empire-html5.goodgamestudios.com\",\"GCI\":\"\",\"SID\":9,\"PLFID\":1}}%"
+        # Use json.dumps to correctly format the payload dictionary into a JSON string
+        login_command = f"%xt%EmpireEx_2%lli%1%{json.dumps(login_payload)}%"
+        # --- END CORRECTION ---
         ws.send(login_command)
         log(f"🔐 Anmeldeversuch für '{username}' gesendet.")
 
-        # --- Wait after login attempt ---
         log(f"⏳ Warte {login_wait_time} Sekunden nach dem Login-Versuch...")
         time.sleep(login_wait_time)
 
-        # --- REVERTED CHANGE 2: Simpler post-login buffer clear handling ---
-        # Optional: Clear any messages received during the login wait
         try:
-            ws.settimeout(0.1) # Short timeout for clearing buffer
-            while True:
-                msg = ws.recv()
-                # log(f"  (Verwerfe Nachricht nach Login: {msg[:60]}...)") # Uncomment for debug
-        except (websocket.WebSocketTimeoutException, TimeoutError):
-            pass # Expected timeout when buffer is empty
-        except Exception as discard_err:
-            log(f"⚠️ Fehler beim Verwerfen alter Nachrichten nach Login: {discard_err}")
-        # Explicitly set the timeout for the spin loop *after* the clearing attempt
+            ws.settimeout(0.1)
+            while True: msg = ws.recv()
+        except (websocket.WebSocketTimeoutException, TimeoutError): pass
+        except Exception as discard_err: log(f"⚠️ Fehler beim Verwerfen alter Nachrichten nach Login: {discard_err}")
         ws.settimeout(receive_timeout_per_spin)
 
-
         log("🚀 Beginne mit den Glücksrad-Spins...")
-
-        # --- Spin Loop (Remains the same) ---
         for i in range(spins):
             current_spin = i + 1
-            log(f"🎰 [{current_spin}/{spins}] Bereite Spin vor...")
-            time.sleep(spin_send_delay) # Small delay before sending command
+            # log(f"🎰 [{current_spin}/{spins}] Bereite Spin vor...") # Less verbose
+            time.sleep(spin_send_delay)
 
-            # --- Send Spin Command (Remains the same) ---
             spin_command = "%xt%EmpireEx_2%lws%1%{\"LWET\":1}%"
             try:
                 ws.send(spin_command)
-                log(f"-> Befehl für Spin {current_spin} gesendet.")
+                # log(f"-> Befehl für Spin {current_spin} gesendet.") # Less verbose
             except Exception as send_err:
                 log(f"❌ Fehler beim Senden des Spin-Befehls {current_spin}: {send_err}. Breche ab.")
-                traceback.print_exc()
-                break
+                traceback.print_exc(); break
 
-            # --- Wait Specifically for the Reward Message (Remains the same) ---
             spin_reward_found = False
             search_start_time = time.time()
-            log(f"👂 [{current_spin}/{spins}] Warte auf Belohnungsnachricht (max {receive_timeout_per_spin}s)...")
+            # log(f"👂 [{current_spin}/{spins}] Warte auf Belohnungsnachricht (max {receive_timeout_per_spin}s)...") # Less verbose
 
             while time.time() - search_start_time < receive_timeout_per_spin:
                 try:
-                    # Calculate remaining time for this specific recv attempt
                     remaining_time = max(0.1, receive_timeout_per_spin - (time.time() - search_start_time))
-                    ws.settimeout(remaining_time) # Dynamically set timeout
-
+                    ws.settimeout(remaining_time)
                     msg = ws.recv()
-                    if isinstance(msg, bytes):
-                        msg = msg.decode("utf-8", errors="ignore")
+                    if isinstance(msg, bytes): msg = msg.decode("utf-8", errors="ignore")
 
                     if msg.startswith("%xt%lws%1%0%"):
                         log(f"🎯 [{current_spin}/{spins}] Passende Belohnungsnachricht gefunden!")
                         parse_reward_message(msg, rewards)
-                        spin_reward_found = True
-                        break
-                    else:
-                        if msg.startswith("%xt%"):
-                             log(f"🌀 [{current_spin}/{spins}] Ignoriere Nachricht: {msg[:80]}...")
+                        spin_reward_found = True; break
+                    # else: # Don't log every ignored message unless debugging
+                        # if msg.startswith("%xt%"): log(f"🌀 [{current_spin}/{spins}] Ignoriere Nachricht: {msg[:80]}...")
 
                 except (websocket.WebSocketTimeoutException, TimeoutError):
                     if not (time.time() - search_start_time < receive_timeout_per_spin):
                          log(f"⏰ [{current_spin}/{spins}] Timeout ({receive_timeout_per_spin}s) erreicht beim Warten auf Belohnungsnachricht.")
                     break
-
                 except (websocket.WebSocketConnectionClosedException, BrokenPipeError) as conn_err:
-                    log(f"❌ [{current_spin}/{spins}] Verbindung geschlossen beim Warten auf Belohnung: {conn_err}. Breche ab.")
+                    log(f"❌ [{current_spin}/{spins}] Verbindung geschlossen: {conn_err}. Breche ab.")
                     raise conn_err
-
                 except Exception as recv_err:
-                    log(f"⚠️ [{current_spin}/{spins}] Fehler beim Empfangen/Prüfen der Nachricht: {recv_err}")
-                    traceback.print_exc()
-                    break
+                    log(f"⚠️ [{current_spin}/{spins}] Fehler beim Empfangen/Prüfen: {recv_err}")
+                    traceback.print_exc(); break
 
             if not spin_reward_found:
-                 log(f"🤷 [{current_spin}/{spins}] Keine passende Belohnungsnachricht innerhalb von {receive_timeout_per_spin}s gefunden oder Fehler beim Empfang.")
+                 log(f"🤷 [{current_spin}/{spins}] Keine passende Belohnungsnachricht gefunden ({receive_timeout_per_spin}s).")
 
         log("✅ Alle angeforderten Spins wurden versucht.")
 
-    # --- Exception Handling (Remains the same) ---
     except websocket.WebSocketTimeoutException as e:
-        log(f"❌ Timeout ({connect_timeout}s) beim Herstellen der WebSocket-Verbindung. Server nicht erreichbar? {e}")
-        raise ConnectionError("Connection Timeout") from e
+        log(f"❌ Connection Timeout ({connect_timeout}s): {e}"); raise ConnectionError("Connection Timeout") from e
     except websocket.WebSocketBadStatusException as e:
-         log(f"❌ Fehler beim WebSocket Handshake (Bad Status): {e.status_code} {e.resp_body}. URL korrekt?")
-         raise ConnectionError("WebSocket Handshake Failed") from e
+         log(f"❌ WebSocket Handshake Failed (Bad Status {e.status_code}): {e.resp_body}"); raise ConnectionError("WebSocket Handshake Failed") from e
     except (websocket.WebSocketConnectionClosedException, BrokenPipeError) as e:
-         log(f"❌ WebSocket-Verbindung war geschlossen oder wurde während des Prozesses unerwartet beendet. {e}")
+         log(f"❌ WebSocket Connection Closed Unexpectedly: {e}")
     except Exception as e:
-        log(f"❌ Schwerwiegender Fehler im spin_lucky_wheel Prozess: {e}")
-        traceback.print_exc()
-        raise e
+        log(f"❌ Schwerwiegender Fehler im spin_lucky_wheel: {e}"); traceback.print_exc(); raise e
     finally:
-        # --- Ensure the WebSocket is closed cleanly (Remains the same) ---
         if ws and ws.connected:
-            log("🔌 Schließe WebSocket-Verbindung.")
-            try: ws.close()
-            except Exception as close_err: log(f"⚠️ Fehler beim Schließen der WebSocket-Verbindung: {close_err}")
-        elif ws: log("ℹ️ WebSocket-Verbindung war bereits geschlossen.")
-        else: log("ℹ️ Keine WebSocket-Verbindung zum Schließen vorhanden.")
+            log("🔌 Schließe WebSocket-Verbindung."); ws.close()
+        # elif ws: log("ℹ️ WebSocket-Verbindung war bereits geschlossen.")
+        # else: log("ℹ️ Keine WebSocket-Verbindung zum Schließen vorhanden.")
 
     log(f"Gesammelte Belohnungen: {dict(rewards)}")
     return dict(rewards)
@@ -497,11 +469,10 @@ def spin_lucky_wheel(username, password, spins):
 bot = SpinBot()
 
 @bot.tree.command(name="spin", description="Startet das Glücksrad-Drehen für Goodgame Empire.")
-@app_commands.checks.cooldown(1, 60.0, key=lambda i: i.user.id) # Cooldown: 1 use per 60 sec per user
+@app_commands.checks.cooldown(1, 60.0, key=lambda i: i.user.id)
 async def spin(interaction: discord.Interaction):
     """Slash command handler to initiate the spin process by showing the modal."""
     log(f"Befehl /spin von Benutzer {interaction.user} (ID: {interaction.user.id}) erhalten.")
-    # Show the modal to the user to collect credentials
     await interaction.response.send_modal(SpinModal())
 
 @spin.error
@@ -509,33 +480,19 @@ async def on_spin_error(interaction: discord.Interaction, error: app_commands.Ap
     """Handles errors specifically for the /spin command, like cooldowns."""
     if isinstance(error, app_commands.CommandOnCooldown):
         await interaction.response.send_message(
-            f"⏳ Dieser Befehl hat einen Cooldown. Bitte warte noch {error.retry_after:.2f} Sekunden.",
-            ephemeral=True
-        )
+            f"⏳ Cooldown aktiv. Bitte warte noch {error.retry_after:.2f} Sekunden.", ephemeral=True)
     else:
-        # Log other errors originating from the command itself (not the modal's on_submit)
-        log(f"Unhandled error in /spin command processing: {error}")
-        traceback.print_exc()
-        # Use followup if original interaction response was already sent (e.g., deferred)
+        log(f"Unhandled error in /spin command processing: {error}"); traceback.print_exc()
         resp_func = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
-        await resp_func(
-            "Ein unerwarteter Fehler ist beim Verarbeiten des Befehls aufgetreten.",
-            ephemeral=True
-        )
+        await resp_func("Ein unerwarteter Fehler ist aufgetreten.", ephemeral=True)
 
 # --- Bot Execution ---
 if __name__ == "__main__":
     if not TOKEN:
-        print("❌ FATAL: DISCORD_TOKEN Umgebungsvariable nicht gesetzt!")
-        print("Bitte setze die Umgebungsvariable 'DISCORD_TOKEN' mit deinem Discord Bot Token.")
-        exit(1) # Exit if token is missing
+        print("❌ FATAL: DISCORD_TOKEN Umgebungsvariable nicht gesetzt!"); exit(1)
     else:
         log("Starte SpinBot...")
         try:
-            # Run the bot asynchronously
             bot.run(TOKEN)
-        except discord.LoginFailure:
-            log("❌ FATAL: Login zum Discord fehlgeschlagen. Ist der Token korrekt?")
-        except Exception as e:
-            log(f"❌ FATAL: Ein unerwarteter Fehler hat den Bot beendet: {e}")
-            traceback.print_exc()
+        except discord.LoginFailure: log("❌ FATAL: Login zum Discord fehlgeschlagen. Token korrekt?")
+        except Exception as e: log(f"❌ FATAL: Bot beendet durch Fehler: {e}"); traceback.print_exc()
