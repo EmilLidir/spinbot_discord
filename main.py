@@ -74,53 +74,71 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
             embed_done = discord.Embed(title="✅ Spins Abgeschlossen!", description=f"Alle `{spins}` Spins für `{username}` wurden ausgeführt.", color=discord.Color.green())
 
             if rewards:
-                # --- START: Direct Emoji String Mapping ---
+                # --- START: Emoji Map and Sorting Logic ---
 
-                # 1. Define the mapping using the full emoji strings from the Dev Portal image
+                # 1. Define the mapping with CORRECTED IDs
                 direct_emoji_map = {
                     "Werkzeuge": "<:tools:1359522120509554922>",
-                    "Ausrüstung/Edelsteine": "<:gear:1359518850713911488>", # Key matches parser output for RI
+                    "Ausrüstung/Edelsteine": "<:gear:1359518850713911488>",
                     "Konstrukte": "<:konstrukte:1359518720531235047>",
                     "Kisten": "<:chest:1359518414154104974>",
                     "Dekorationen": "<:dekorationen:1359518108900917359>",
                     "Mehrweller": "<:mehrweller:1359517882064699483>",
-                    "Sceattas": "<:sceatta:135951737066438747>", # Key matches parser output for STP
-                    "Beatrice-Geschenke": "<:beatrice:1359517272640721170>", # Key matches parser output for PTK
-                    "Ulrich-Geschenke": "<:ulrich:1359516848474820789>", # Key matches parser output for KTK
-                    "Ludwig-Geschenke": "<:ludwig:1359516694716092416>", # Key matches parser output for FKT
-                    # "Baumarken": "<:baumarken:1359516243463373030>", # Parser generates "Ausbaumarken" for LM type.
-                    "Ausbaumarken": "<:ausbaumarken:1359516063472686222>", # Key matches parser output for LM
-                    "Rubine": "<:ruby:1359515929517318112>", # Key matches parser output for C2
-                    "Lose": "<:ticket:1359508197429219501>", # Key matches parser output for SLWT
-                    "Beschützer des Nordens": "<:beschuetzer:1359481568430915765>", # Key matches parser output for U troop
-                    "Schildmaid": "<:schildmaid:1359479372041683015>", # Key matches parser output for U troop
-                    "Walküren-Scharfschützin": "<:scharfschuetzin:1359477765421793422>", # Key matches parser output for U troop
-                    "Walküren-Waldläuferin": "<:waldlaeuferin:1359477735856013576>" # Key matches parser output for U troop
+                    "Sceattas": "<:sceatta:135951737066438747>",
+                    "Beatrice-Geschenke": "<:beatrice:1359517272640721170>",
+                    "Ulrich-Geschenke": "<:ulrich:1359516848474820789>",
+                    "Ludwig-Geschenke": "<:ludwig:1359516694716092416>",
+                    "Baumarken": "<:baumarken:1359516243463373030>",
+                    "Ausbaumarken": "<:ausbaumarken:135951606347268622>",
+                    "Rubine": "<:ruby:1359515929517318112>",
+                    "Lose": "<:ticket:1359508197429219501>",
+                    "Beschützer des Nordens": "<:beschuetzer:1359481568430915765>",
+                    "Schildmaid": "<:schildmaid:1359479372041683015>",
+                    "Walküren-Scharfschützin": "<:scharfschuetzin:1359477765421793422>",
+                    "Walküren-Waldläuferin": "<:waldlaeuferin:1359477735856013576>"
                 }
 
+                # 2. Define sort order priorities
+                # Lower number = higher priority (appears earlier)
+                sort_priority = {
+                    # Troops: 0
+                    "Schildmaid": 0, "Walküren-Scharfschützin": 0, "Beschützer des Nordens": 0, "Walküren-Waldläuferin": 0,
+                    # Tickets: 1
+                    "Lose": 1,
+                    # Rubies: 2
+                    "Rubine": 2,
+                    # Lord Gifts: 3
+                    "Ludwig-Geschenke": 3, "Ulrich-Geschenke": 3, "Beatrice-Geschenke": 3,
+                    # Default for others: 99 (can adjust if more categories needed)
+                }
+                DEFAULT_PRIORITY = 99
+
+                # 3. Define the sort key function
+                def get_reward_sort_key(item):
+                    key, _ = item # item is a (key, value) tuple
+                    priority = sort_priority.get(key, DEFAULT_PRIORITY)
+                    return (priority, key) # Sort by priority, then alphabetically by key
+
+                # 4. Sort the rewards using the custom key
+                sorted_rewards = sorted(rewards.items(), key=get_reward_sort_key)
+
+                # 5. Format the sorted rewards
                 reward_lines_list = []
-
-                # 2. Iterate through sorted rewards and use the direct map
-                for reward_key, reward_value in sorted(rewards.items()):
-                    # Try to get the pre-formatted emoji string from the map
-                    emoji_string = direct_emoji_map.get(reward_key) # Use .get() for safe lookup
-
-                    # --- FORMATTING LOGIC ---
+                for reward_key, reward_value in sorted_rewards:
+                    emoji_string = direct_emoji_map.get(reward_key)
                     if emoji_string:
-                        # Emoji string found in map: Display EMOJI COUNT
                         reward_lines_list.append(f"{emoji_string} {reward_value:,}")
                     else:
-                        # Emoji string NOT found in map: Fallback to **NAME**: COUNT
                         log(f"ℹ️ Kein direkter Emoji-String für '{reward_key}' in der Map gefunden. Zeige Namen an.")
                         reward_lines_list.append(f"**{reward_key}**: {reward_value:,}")
-                    # --- END FORMATTING LOGIC ---
 
                 reward_lines = "\n".join(reward_lines_list)
-                # --- END: Direct Emoji String Mapping ---
+                # --- END: Emoji Map and Sorting Logic ---
 
-                embed_done.add_field(name="Erhaltene Belohnungen", value=reward_lines, inline=False)
+                # Add the field with the custom sorted rewards
+                embed_done.add_field(name="🎁 Erhaltene Belohnungen", value=reward_lines, inline=False) # Changed field name back
             else:
-                embed_done.add_field(name="Erhaltene Belohnungen", value="Keine Belohnungen erkannt oder Prozess vorzeitig beendet.", inline=False)
+                embed_done.add_field(name="🎁 Erhaltene Belohnungen", value="Keine Belohnungen erkannt oder Prozess vorzeitig beendet.", inline=False)
                 embed_done.color = discord.Color.gold()
 
             await status_message.edit(embed=embed_done)
@@ -142,12 +160,10 @@ class SpinBot(discord.Client):
         intents.message_content = False
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
-        # No need for self.app_emojis with the direct map approach
 
     async def setup_hook(self):
         """Syncs commands before the bot is ready."""
         log("🔌 Running setup_hook...")
-        # No need to fetch application_info here for emojis
         log("   Syncing slash commands...")
         try:
             await self.tree.sync()
@@ -160,17 +176,16 @@ class SpinBot(discord.Client):
     async def on_ready(self):
         """Called when the bot successfully connects to Discord."""
         print(f"✅ Bot ist online als {self.user} (ID: {self.user.id})")
-        # Logging the general emoji cache might still be useful for debugging other issues
-        # print(f"✅ Gesamt-Emojis im Client-Cache (self.emojis): {[e.name for e in self.emojis]}")
         print(f"✅ Bereit und wartet auf Befehle...")
 
 
+# --- MODIFIED parse_reward_message ---
 def parse_reward_message(msg, rewards):
     """Parses the specific reward message format from the game server."""
     try:
         match = re.search(r"%xt%lws%1%0%(.*)%", msg)
         if not match:
-            if msg.startswith("%xt%"): pass # Keep logs cleaner
+            if msg.startswith("%xt%"): pass
             return
         json_str = match.group(1)
         data = json.loads(json_str)
@@ -188,9 +203,14 @@ def parse_reward_message(msg, rewards):
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'U': {reward_data}")
                 elif reward_type == "RI": amount = 1; reward_name = "Ausrüstung/Edelsteine"
                 elif reward_type == "CI": amount = 1; reward_name = "Konstrukte"
-                elif reward_type == "LM":
+                elif reward_type == "LM": # This is Ausbaumarken
                     if isinstance(reward_data, int): amount = reward_data; reward_name = "Ausbaumarken"
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'LM': {reward_data}")
+                # --- ADDED Condition for LT ---
+                elif reward_type == "LT": # This should be Baumarken based on "Unbekannt_LT"
+                    if isinstance(reward_data, int): amount = reward_data; reward_name = "Baumarken"
+                    else: log(f"  ⚠️ Ungültiges Format für Typ 'LT': {reward_data}")
+                # --- END ADDED Condition ---
                 elif reward_type == "STP":
                     if isinstance(reward_data, int): amount = reward_data; reward_name = "Sceattas"
                     else: log(f"  ⚠️ Ungültiges Format für Typ 'STP': {reward_data}")
@@ -228,6 +248,7 @@ def parse_reward_message(msg, rewards):
 
 # --- Core WebSocket Logic (Reverted Login Command Construction) ---
 def spin_lucky_wheel(username, password, spins):
+    # ... (spin_lucky_wheel function remains unchanged from the previous version) ...
     rewards = defaultdict(int); ws = None; connect_timeout = 20.0; login_wait_time = 5.0; receive_timeout_per_spin = 15.0; spin_send_delay = 0.3
     try:
         log(f"Versuche Verbindung herzustellen (Timeout: {connect_timeout}s)")
