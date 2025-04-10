@@ -326,7 +326,6 @@ async def spintest(interaction: discord.Interaction):
         "Schildmaid": 300000,
         "Walküren-Scharfschützin": 114000,
         "Walküren-Waldläuferin": 97500,
-        "Unbekannt_XYZ": 1 # Test the fallback formatting
     }
 
     try:
@@ -338,7 +337,7 @@ async def spintest(interaction: discord.Interaction):
             description="Dies ist eine Vorschau, wie die Belohnungen angezeigt werden:",
             color=discord.Color.blue()
         )
-        embed_test.add_field(name="🎁 Test-Belohnungen", value=reward_lines, inline=False)
+        embed_test.add_field(name="Test-Belohnungen", value=reward_lines, inline=False)
         await interaction.followup.send(embed=embed_test, ephemeral=True)
 
     except Exception as e:
