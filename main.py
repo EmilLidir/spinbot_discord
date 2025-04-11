@@ -32,7 +32,6 @@ def format_rewards_field_value(rewards: Dict[str, int]) -> str:
     if not rewards:
         return "Keine Belohnungen vorhanden."
 
-    # 1. Define the mapping with CORRECTED IDs from the image
     direct_emoji_map = {
         "Werkzeuge": "<:tools:1359522120509554922>",
         "Ausrüstung/Edelsteine": "<:gear:1359518850713911488>",
@@ -308,24 +307,24 @@ async def spintest(interaction: discord.Interaction):
 
     # Define sample rewards - include all keys from the map and potential unknown ones
     test_rewards = {
-        "Werkzeuge": 2540,
-        "Ausrüstung/Edelsteine": 2,
-        "Konstrukte": 1,
-        "Kisten": 3,
-        "Dekorationen": 1,
-        "Mehrweller": 1,
+        "Werkzeuge": 30000,
+        "Ausrüstung/Edelsteine": 30,
+        "Konstrukte": 5,
+        "Kisten": 120,
+        "Dekorationen": 10,
+        "Mehrweller": 15,
         "Sceattas": 610,
         "Beatrice-Geschenke": 5,
-        "Ulrich-Geschenke": 7,
-        "Ludwig-Geschenke": 6,
+        "Ulrich-Geschenke": 12,
+        "Ludwig-Geschenke": 45,
         "Baumarken": 672,
         "Ausbaumarken": 6592,
-        "Rubine": 146,
-        "Lose": 12,
+        "Rubine": 1000000,
+        "Lose": 115,
         "Beschützer des Nordens": 126000,
         "Schildmaid": 300000,
         "Walküren-Scharfschützin": 114000,
-        "Walküren-Waldläuferin": 97500,
+        "Walküren-Waldläuferin": 197500,
     }
 
     try:
