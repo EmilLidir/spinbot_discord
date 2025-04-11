@@ -116,8 +116,3 @@ A Discord bot designed to automate the process of spinning the Lucky Wheel in th
 *   **Modal Error:**
     *   Ensure the bot has necessary permissions in the channel (Send Messages, Embed Links).
     *   There might be temporary Discord API issues.
-
-## License
-
-(Optional) Specify a license, e.g.:
-This project is licensed under the MIT License - see the LICENSE.md file for details.
