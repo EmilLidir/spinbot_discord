@@ -29,25 +29,25 @@ def format_rewards_field_value(rewards: Dict[str, int]) -> str:
         return "No rewards available."
 
     direct_emoji_map = {
-        "Werkzeuge": "<:tools:1359522120509554922>",
-        "Ausrüstung/Edelsteine": "<:gear:1359518850713911488>",
-        "Konstrukte": "<:konstrukte:1359518720531235047>",
-        "Kisten": "<:chest:1359518414154104974>",
-        "Dekorationen": "<:dekorationen:1359518108900917359>",
-        "Mehrweller": "<:mehrweller:1359517882064699483>",
-        "Sceattas": "<:sceatta:135951737066438747>",
-        "Beatrice-Geschenke": "<:beatrice:1359517272640721170>",
-        "Ulrich-Geschenke": "<:ulrich:1359516848474820789>",
-        "Ludwig-Geschenke": "<:ludwig:1359516694716092416>",
-        "Baumarken": "<:baumarken:1359516243463373030>",
-        "Ausbaumarken": "<:ausbaumarken:135951606347268622>",
-        "Rubine": "<:ruby:1359515929517318112>",
-        "Lose": "<:ticket:1359508197429219501>",
-        "Beschützer des Nordens": "<:beschuetzer:1359481568430915765>",
-        "Schildmaid": "<:schildmaid:1359479372041683015>",
-        "Walküren-Scharfschützin": "<:scharfschuetzin:1359477765421793422>",
-        "Walküren-Waldläuferin": "<:waldlaeuferin:1359477735856013576>"
-    }
+                    "Werkzeuge": "<:tools:1359522120509554922>",
+                    "Ausrüstung/Edelsteine": "<:gear:1359518850713911488>",
+                    "Konstrukte": "<:konstrukte:1359518720531235047>",
+                    "Kisten": "<:chest:1359518414154104974>",
+                    "Dekorationen": "<:dekorationen:1359518108900917359>",
+                    "Mehrweller": "<:mehrweller:1359517882064699483>",
+                    "Sceattas": "<:sceatta:1359517377066438747>",
+                    "Beatrice-Geschenke": "<:beatrice:1359517272640721170>",
+                    "Ulrich-Geschenke": "<:ulrich:1359516848474820789>",
+                    "Ludwig-Geschenke": "<:ludwig:1359516694716092416>",
+                    "Baumarken": "<:baumarken:1359516243463373030>",
+                    "Ausbaumarken": "<:ausbaumarken:1359516063477268622>",
+                    "Rubine": "<:ruby:1359515929951731812>",
+                    "Lose": "<:ticket:1359508197429219501>",
+                    "Beschützer des Nordens": "<:beschuetzer:1359481568430915765>",
+                    "Schildmaid": "<:schildmaid:1359479372041683015>",
+                    "Walküren-Scharfschützin": "<:scharfschuetzin:1359477765421793422>",
+                    "Walküren-Waldläuferin": "<:waldlaeuferin:1359477735856013576>"
+                }
 
     sort_priority = {
         "Schildmaid": 0, "Walküren-Scharfschützin": 0, "Beschützer des Nordens": 0, "Walküren-Waldläuferin": 0,
@@ -289,7 +289,7 @@ async def spintest(interaction: discord.Interaction):
     log(f"Befehl /spintest von Benutzer {interaction.user} (ID: {interaction.user.id}) erhalten.")
     await interaction.response.defer(ephemeral=True)
 
-    test_rewards = { "Werkzeuge": 2540, "Ausrüstung/Edelsteine": 2, "Konstrukte": 1, "Kisten": 3, "Dekorationen": 1, "Mehrweller": 1, "Sceattas": 610, "Beatrice-Geschenke": 5, "Ulrich-Geschenke": 7, "Ludwig-Geschenke": 6, "Baumarken": 672, "Ausbaumarken": 6592, "Rubine": 146, "Lose": 12, "Beschützer des Nordens": 126000, "Schildmaid": 300000, "Walküren-Scharfschützin": 114000, "Walküren-Waldläuferin": 97500, "Unbekannt_XYZ": 1 }
+    test_rewards = { "Werkzeuge": 3000, "Ausrüstung/Edelsteine": 2, "Konstrukte": 1, "Kisten": 3, "Dekorationen": 1, "Mehrweller": 1, "Sceattas": 610, "Beatrice-Geschenke": 5, "Ulrich-Geschenke": 7, "Ludwig-Geschenke": 6, "Baumarken": 672, "Ausbaumarken": 6592, "Rubine": 100000, "Lose": 120, "Beschützer des Nordens": 126000, "Schildmaid": 300000, "Walküren-Scharfschützin": 114000, "Walküren-Waldläuferin": 197500 }
 
     try:
         reward_lines = format_rewards_field_value(test_rewards)
