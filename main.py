@@ -17,7 +17,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service as ChromeService # For explicit chromedriver path
-# from webdriver_manager.chrome import ChromeDriverManager # Optional: for auto-managing chromedriver
+from webdriver_manager.chrome import ChromeDriverManager # Optional: for auto-managing chromedriver
 from selenium.common.exceptions import WebDriverException, TimeoutException as SeleniumTimeoutException
 
 # --- Bot Configuration ---
@@ -121,7 +121,10 @@ def get_gge_recaptcha_token(user_id_for_logging: str = "System", quiet: bool = F
         options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36") # Keep User-Agent somewhat up-to-date
 
         try:
-            driver = webdriver.Chrome(options=options)
+            driver = webdriver.Chrome(
+            service=ChromeService(ChromeDriverManager().install()),
+            options=options
+        )
             
         except WebDriverException as e_init_driver:
             logger.error(f"[{user_id_for_logging}] ChromeDriver could not be initialized: {e_init_driver}")
