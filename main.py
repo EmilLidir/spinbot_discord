@@ -78,9 +78,7 @@ def format_rewards_field_value(rewards: Dict[str, int]) -> str:
     }
     DEFAULT_PRIORITY = 99
 
-
 def parse_reward_message(msg, rewards: defaultdict):
-    # ... (Your existing parse_reward_message implementation - KEEP AS IS) ...
     try:
         match = re.search(r"%xt%lws%1%0%(.*)%", msg)
         if not match:
@@ -137,29 +135,28 @@ def parse_reward_message(msg, rewards: defaultdict):
     except json.JSONDecodeError as e: log(f"❌ JSON-Parse Fehler '{json_str}': {e}")
     except Exception as e: log(f"❌ Unerwarteter Parse-Fehler '{msg[:100]}...': {e}"); traceback.print_exc()
 
-
-# --- Selenium Function to Get reCAPTCHA Token (from your working test script) ---
-def get_gge_recaptcha_token_for_spinbot(quiet=False): # Added "for_spinbot" to distinguish if needed
-    log_prefix = "SpinBotRCT:" # Use a distinct prefix for these logs
+# --- Selenium Function to Get reCAPTCHA Token ---
+def get_gge_recaptcha_token_for_spinbot(quiet=False):
+    log_prefix = "SpinBotRCT:"
     log(f"{log_prefix} Versuche, einen GGE reCAPTCHA Token mit Selenium zu erhalten...")
     driver = None
     try:
         options = webdriver.ChromeOptions()
-        options.add_argument("--window-size=800,600") 
-        options.add_argument("--headless")
+        options.add_argument("--window-size=800,600")
+        options.add_argument("--headless") # Important for server deployment
         options.add_argument("--disable-gpu")
-        options.add_argument("--no-sandbox") 
-        options.add_argument("--disable-dev-shm-usage") 
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option("useAutomationExtension", False)
         options.add_argument('--disable-blink-features=AutomationControlled')
-        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36") # Example User Agent
 
         try:
-            driver = webdriver.Chrome(options=options) 
+            driver = webdriver.Chrome(options=options)
         except WebDriverException as e_init_driver:
             log(f"{log_prefix} ❌ ChromeDriver Initialisierungsfehler: {e_init_driver}")
-            log(f"{log_prefix} Stellen Sie sicher, dass chromedriver.exe im PATH oder im Skriptverzeichnis ist und zur Chrome-Version passt.")
+            log(f"{log_prefix} Stellen Sie sicher, dass chromedriver.exe im PATH oder im Skriptverzeichnis ist und zur Chrome-Version passt (siehe Dockerfile).")
             return None
         log(f"{log_prefix} ChromeDriver initialisiert.")
         
@@ -173,7 +170,7 @@ def get_gge_recaptcha_token_for_spinbot(quiet=False): # Added "for_spinbot" to d
 
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '.grecaptcha-badge')))
         log(f"{log_prefix} reCAPTCHA Badge gefunden.")
-        time.sleep(2.5)
+        time.sleep(2.5) 
 
         log(f"{log_prefix} Führe grecaptcha.execute-Skript aus...")
         script_to_execute = f"""
@@ -199,7 +196,7 @@ def get_gge_recaptcha_token_for_spinbot(quiet=False): # Added "for_spinbot" to d
             return recaptcha_token
         else:
             log(f"{log_prefix} ❌ Konnte reCAPTCHA Token nicht abrufen.")
-            if driver: driver.save_screenshot("rct_token_null_spinbot.png")
+            if driver: driver.save_screenshot("rct_token_null_spinbot.png") # Helps in debugging
             return None
     except SeleniumTimeoutException as e_timeout: log(f"{log_prefix} Selenium Timeout: {e_timeout}")
     except WebDriverException as e_wd: log(f"{log_prefix} WebDriver Fehler: {e_wd}")
@@ -209,13 +206,12 @@ def get_gge_recaptcha_token_for_spinbot(quiet=False): # Added "for_spinbot" to d
         log(f"{log_prefix} Selenium Browser für reCAPTCHA geschlossen.")
     return None
 
-
 # --- Modified spin_lucky_wheel ---
 def spin_lucky_wheel(username, password, spins, rct_token): # Accepts rct_token
     rewards = defaultdict(int); ws = None; connect_timeout = 20.0
-    login_wait_time = 3.0 # Time to wait after sending login command with RCT
+    login_wait_time = 3.0 
     receive_timeout_per_spin = 15.0; spin_send_delay = 0.35 
-    log_prefix = f"SpinBot ({username}):" # Consistent logging prefix
+    log_prefix = f"SpinBot ({username}):"
 
     try:
         log(f"{log_prefix} Versuche Verbindung (Timeout: {connect_timeout}s)")
@@ -223,17 +219,14 @@ def spin_lucky_wheel(username, password, spins, rct_token): # Accepts rct_token
         log(f"{log_prefix} ✅ WebSocket-Verbindung erfolgreich hergestellt!")
         log(f"{log_prefix} Sende Login-Sequenz mit reCAPTCHA Token...")
 
-        # Initial handshake (same as your new GGE logs showed before lli)
-        ws.send("<msg t='sys'><body action='verChk' r='0'><ver v='166' /></body></msg>"); time.sleep(0.15)
-        ws.send(f"<msg t='sys'><body action='login' r='0'><login z='{GGE_GAME_WORLD}'><nick><![CDATA[]]></nick><pword><![CDATA[1133015%de%0]]></pword></login></body></msg>"); time.sleep(0.15) 
-        ws.send(f"%xt%{GGE_GAME_WORLD}%vln%1%{{\"NOM\":\"{username}\"}}%"); time.sleep(0.15)
+        ws.send("<msg t='sys'><body action='verChk' r='0'><ver v='166' /></body></msg>")
+        ws.send(f"<msg t='sys'><body action='login' r='0'><login z='{GGE_GAME_WORLD}'><nick><![CDATA[]]></nick><pword><![CDATA[1133015%de%0]]></pword></login></body></msg>") 
+        ws.send(f"%xt%{GGE_GAME_WORLD}%vln%1%{{\"NOM\":\"{username}\"}}%")
         
-        # Construct and send the NEW login command with RCT
         login_payload = {
-            "CONM": 297, "RTM": 54, "ID": 0, "PL": 1, 
-            "NOM": username, "PW": password, "LT": None, "LANG": "de", 
-            "DID": "0", "AID": "1728606031093813874", # From your RCT login log
-            "KID": "", "REF": "https://empire.goodgamestudios.com", # From your RCT login log
+            "CONM": 297, "RTM": 54, "ID": 0, "PL": 1, "NOM": username, "PW": password, 
+            "LT": None, "LANG": "de", "DID": "0", "AID": "1728606031093813874", 
+            "KID": "", "REF": "https://empire.goodgamestudios.com", 
             "GCI": "", "SID": 9, "PLFID": 1, "RCT": rct_token
         }
         login_command_with_rct = f"%xt%{GGE_GAME_WORLD}%lli%1%{json.dumps(login_payload)}%"
@@ -246,60 +239,39 @@ def spin_lucky_wheel(username, password, spins, rct_token): # Accepts rct_token
         log(f"{log_prefix} 🔐 Anmeldeversuch mit RCT gesendet.")
         log(f"{log_prefix} ⏳ Warte {login_wait_time}s nach Login-Versuch auf Bestätigung...")
         
-        login_confirmed = False
-        login_check_start_time = time.time()
-        received_after_login_cmd_snippets = []
+        login_confirmed = False; login_check_start_time = time.time(); received_after_login_cmd_snippets = []
         
-        # Loop to catch the login confirmation message
-        ws.settimeout(0.5) # Short timeout for individual recv attempts in loop
-        while time.time() - login_check_start_time < login_wait_time + 2.0: # Wait a bit longer than login_wait_time
-            if not ws.connected:
-                log(f"{log_prefix} ❌ Verbindung während Login-Bestätigung verloren.")
-                break
+        ws.settimeout(0.5) 
+        while time.time() - login_check_start_time < login_wait_time + 2.0: 
+            if not ws.connected: log(f"{log_prefix} ❌ Verbindung während Login-Bestätigung verloren."); break
             try:
                 msg = ws.recv()
                 if isinstance(msg, bytes): msg = msg.decode("utf-8", errors="ignore")
                 received_after_login_cmd_snippets.append(msg[:150])
-                if "%xt%lli%1%0%" in msg:
-                    log(f"{log_prefix} ✅ Login-Bestätigung (%xt%lli%1%0%) erhalten!")
-                    login_confirmed = True
-                    break
-                elif "%xt%lli%1%409%" in msg: # Handle potential conflict
-                    log(f"{log_prefix} ❌ Login-Antwort mit Konflikt (Code 409) erhalten: {msg[:150]}. Breche ab.")
-                    raise ConnectionError("Login Konflikt (409) vom Server erhalten.")
-                # Add other GGE error codes from lli if you know them
-            except websocket.WebSocketTimeoutException:
-                continue # No message in 0.5s, continue loop if overall time not up
-            except ConnectionError: raise # Re-raise specific ConnectionError
-            except Exception as e_recv_login:
-                log(f"{log_prefix} Fehler beim Empfangen der Login-Bestätigung: {e_recv_login}")
-                break # Stop trying on other errors
+                if "%xt%lli%1%0%" in msg: log(f"{log_prefix} ✅ Login-Bestätigung (%xt%lli%1%0%) erhalten!"); login_confirmed = True; break
+                elif "%xt%lli%1%409%" in msg: log(f"{log_prefix} ❌ Login-Antwort mit Konflikt (Code 409) erhalten: {msg[:150]}. Breche ab."); raise ConnectionError("Login Konflikt (409) vom Server erhalten.")
+            except websocket.WebSocketTimeoutException: continue
+            except ConnectionError: raise 
+            except Exception as e_recv_login: log(f"{log_prefix} Fehler Empfang Login-Bestätigung: {e_recv_login}"); break
         
-        if received_after_login_cmd_snippets:
-            log(f"{log_prefix} Nachrichten nach Login-Befehl (Snippets): {received_after_login_cmd_snippets}")
+        if received_after_login_cmd_snippets: log(f"{log_prefix} Nachrichten nach Login-Befehl (Snippets): {received_after_login_cmd_snippets}")
+        if not login_confirmed: raise ConnectionError("Login zu GGE mit RCT fehlgeschlagen (keine %xt%lli%1%0% Bestätigung).")
 
-        if not login_confirmed:
-            log(f"{log_prefix} ❌ Login-Bestätigung (%xt%lli%1%0%) nicht innerhalb der Zeit erhalten. Breche Spins ab.")
-            raise ConnectionError("Login zu GGE mit RCT fehlgeschlagen (keine %xt%lli%1%0% Bestätigung).")
-
-        # Discard messages after successful login confirmation
-        log(f"{log_prefix} Login erfolgreich bestätigt. Verwerfe weitere Nachrichten für ~1 Sekunde...")
+        log(f"{log_prefix} Login erfolgreich. Verwerfe Nachrichten für ~1 Sekunde...")
         discard_start_time = time.time()
         try:
-            ws.settimeout(0.1) 
-            discard_count = 0
+            ws.settimeout(0.1); discard_count = 0
             while time.time() - discard_start_time < 1.0: 
                 if not ws.connected: break
                 ws.recv(); discard_count+=1
             log(f"{log_prefix} {discard_count} Nachrichten nach Login verworfen.")
         except websocket.WebSocketTimeoutException: pass
-        except Exception as discard_err: log(f"{log_prefix} ⚠️ Fehler beim Verwerfen von Nachrichten nach Login: {discard_err}")
+        except Exception as discard_err: log(f"{log_prefix} ⚠️ Fehler beim Verwerfen nach Login: {discard_err}")
         
-        ws.settimeout(receive_timeout_per_spin) # Reset timeout for spins
+        ws.settimeout(receive_timeout_per_spin)
 
         log(f"{log_prefix} 🚀 Beginne mit {spins} Glücksrad-Spins...")
         for i in range(spins):
-            # ... (Rest of your spin loop logic from the original SpinBot - KEEP AS IS) ...
             current_spin = i + 1; time.sleep(spin_send_delay); spin_command = "%xt%EmpireEx_2%lws%1%{\"LWET\":1}%"
             try: ws.send(spin_command)
             except Exception as send_err: log(f"{log_prefix} ❌ Fehler Senden Spin {current_spin}: {send_err}."); traceback.print_exc(); break
@@ -315,8 +287,8 @@ def spin_lucky_wheel(username, password, spins, rct_token): # Accepts rct_token
                 except (websocket.WebSocketTimeoutException, TimeoutError):
                     if not (time.time() - search_start_time < receive_timeout_per_spin): log(f"{log_prefix} ⏰ [{current_spin}/{spins}] Timeout ({receive_timeout_per_spin}s) für Belohnung.")
                     break
-                except (websocket.WebSocketConnectionClosedException, BrokenPipeError) as conn_err: log(f"{log_prefix} ❌ [{current_spin}/{spins}] Verbindung geschlossen: {conn_err}."); raise conn_err # Re-raise to stop all
-                except Exception as recv_err: log(f"{log_prefix} ⚠️ [{current_spin}/{spins}] Fehler Empfang/Prüfung: {recv_err}"); traceback.print_exc(); break # Break this spin's recv loop
+                except (websocket.WebSocketConnectionClosedException, BrokenPipeError) as conn_err: log(f"{log_prefix} ❌ [{current_spin}/{spins}] Verbindung geschlossen: {conn_err}."); raise conn_err
+                except Exception as recv_err: log(f"{log_prefix} ⚠️ [{current_spin}/{spins}] Fehler Empfang/Prüfung: {recv_err}"); traceback.print_exc(); break
             if not spin_reward_found: log(f"{log_prefix} 🤷 [{current_spin}/{spins}] Keine passende Belohnungsnachricht ({receive_timeout_per_spin}s).")
         log(f"{log_prefix} ✅ Alle {spins} angeforderten Spins versucht.")
     except ConnectionError as e_conn: log(f"{log_prefix} ❌ {e_conn}"); raise 
@@ -329,9 +301,7 @@ def spin_lucky_wheel(username, password, spins, rct_token): # Accepts rct_token
     log(f"{log_prefix} Gesammelte Belohnungen: {dict(rewards)}")
     return dict(rewards)
 
-
 class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
-    # ... (SpinModal definition as before, it calls asyncio.to_thread with the new spin_lucky_wheel args) ...
     def __init__(self):
         super().__init__(timeout=300)
         self.username = discord.ui.TextInput(label="Benutzername", placeholder="GGE Benutzernamen eingeben...", required=True, style=discord.TextStyle.short, max_length=50)
@@ -351,7 +321,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         
         try:
             log(f"SpinBot: Fordere reCAPTCHA Token für '{username}' an...")
-            rct_token = await asyncio.to_thread(get_gge_recaptcha_token_for_spinbot) # Call Selenium part
+            rct_token = await asyncio.to_thread(get_gge_recaptcha_token_for_spinbot)
             if not rct_token:
                 log(f"SpinBot: ❌ Konnte keinen reCAPTCHA Token für '{username}' erhalten.")
                 embed_err = discord.Embed(title="❌ Fehler: reCAPTCHA Token!", description=f"Konnte keinen reCAPTCHA Token für GGE Login erhalten.\nVersuch für `{username}` abgebrochen.", color=discord.Color.red())
@@ -360,18 +330,18 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
             log(f"SpinBot: reCAPTCHA Token für '{username}' erhalten. Starte spin_lucky_wheel...")
             await status_message.edit(embed=discord.Embed(title="🎰 SpinBot: GGE Login...", description=f"Login zu GGE für `{username}` mit reCAPTCHA Token...\n`{spins}` Spin(s) werden vorbereitet.", color=discord.Color.blue()))
             
-            rewards = await asyncio.to_thread(spin_lucky_wheel, username, password, spins, rct_token) # Pass rct_token
+            rewards = await asyncio.to_thread(spin_lucky_wheel, username, password, spins, rct_token)
             
             embed_done = discord.Embed(title="✅ Spins Abgeschlossen!", description=f"Alle `{spins}` Spins für `{username}` ausgeführt.", color=discord.Color.green())
             if rewards: embed_done.add_field(name=" Erhaltene Belohnungen", value=format_rewards_field_value(rewards), inline=False)
             else: embed_done.add_field(name=" Erhaltene Belohnungen", value="Keine Belohnungen erkannt oder Prozess vorzeitig beendet.", inline=False); embed_done.color = discord.Color.gold()
             await status_message.edit(embed=embed_done)
 
-        except ConnectionError as e_conn:
+        except ConnectionError as e_conn: # Catch specific ConnectionError from spin_lucky_wheel
             log(f"SpinBot: Verbindungs-/Loginfehler für {username}: {e_conn}"); traceback.print_exc()
             embed_err = discord.Embed(title="❌ Login- oder Verbindungsfehler!", description=f"Problem beim Login oder der Verbindung zu GGE für `{username}`.\nFehler: `{e_conn}`\nAnmeldedaten prüfen oder später erneut versuchen.", color=discord.Color.red())
             await status_message.edit(embed=embed_err)
-        except Exception as e:
+        except Exception as e: # Catch any other exceptions from to_thread or spin_lucky_wheel
             log(f"SpinBot: Fehler bei Ausführung von spin_lucky_wheel für {username}: {e}"); traceback.print_exc()
             embed_err = discord.Embed(title="❌ Fehler bei Spin-Ausführung!", description=f"Problem bei Verarbeitung der Spins für `{username}`.\nGründe: Falsche Login-Daten, Serverprobleme, Netzwerkunterbrechung.\nDetails im Bot-Konsolenlog prüfen.", color=discord.Color.red())
             await status_message.edit(embed=embed_err)
@@ -382,7 +352,6 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Eingabe"):
         await resp_func('Oops! Formularfehler.', ephemeral=True)
 
 class SpinBotClient(discord.Client):
-    # ... (Same as before) ...
     def __init__(self): intents = discord.Intents.default(); super().__init__(intents=intents); self.tree = app_commands.CommandTree(self)
     async def setup_hook(self):
         log("🔌 setup_hook..."); log("   Synchronisiere Slash-Befehle...")
@@ -394,7 +363,6 @@ class SpinBotClient(discord.Client):
         log("✅ setup_hook abgeschlossen.")
     async def on_ready(self): print(f"✅ Bot online als {self.user} (ID: {self.user.id})\n✅ Bereit für Befehle...")
 
-
 bot_instance = SpinBotClient()
 
 @bot_instance.tree.command(name="spin", description="Startet das Drehen am Glücksrad für Goodgame Empire.")
@@ -405,7 +373,6 @@ async def spin_slash_command(interaction: discord.Interaction):
 
 @bot_instance.tree.command(name="spintest", description="Zeigt eine Testausgabe aller bekannten Belohnungen mit Emojis an.")
 async def spintest_slash_command(interaction: discord.Interaction):
-    # ... (Same as before) ...
     log(f"Befehl /spintest von Benutzer {interaction.user} (ID: {interaction.user.id}) erhalten.")
     await interaction.response.defer(ephemeral=True)
     test_rewards = { "Werkzeuge": 3000, "Ausrüstung/Edelsteine": 2, "Konstrukte": 1, "Kisten": 3, "Dekorationen": 1, "Mehrweller": 1, "Sceattas": 610, "Beatrice-Geschenke": 5, "Ulrich-Geschenke": 7, "Ludwig-Geschenke": 6, "Baumarken": 672, "Ausbaumarken": 6592, "Rubine": 100000, "Lose": 120, "Beschützer des Nordens": 126000, "Schildmaid": 300000, "Walküren-Scharfschützin": 114000, "Walküren-Waldläuferin": 197500 }
@@ -416,20 +383,24 @@ async def spintest_slash_command(interaction: discord.Interaction):
         await interaction.followup.send(embed=embed_test, ephemeral=True)
     except Exception as e: log(f"Fehler bei Testausgabe: {e}"); traceback.print_exc(); await interaction.followup.send("❌ Fehler bei Testausgabe.", ephemeral=True)
 
-
 @bot_instance.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    # ... (Same as before) ...
     if isinstance(error, app_commands.CommandOnCooldown): 
         await interaction.response.send_message(f"⏳ Cooldown aktiv. Bitte warte {error.retry_after:.2f} weitere Sekunden.", ephemeral=True)
     elif isinstance(error, app_commands.CheckFailure):
         await interaction.response.send_message("Du hast nicht die nötigen Berechtigungen für diesen Befehl.", ephemeral=True)
     else: 
         log(f"Unbehandelter Fehler in App-Befehl ({interaction.command.name if interaction.command else 'N/A'}): {error} (Typ: {type(error)})"); traceback.print_exc()
+        # Ensure response is sent only if not already done
         if not interaction.response.is_done():
             await interaction.response.send_message("Ein unerwarteter Fehler ist aufgetreten.", ephemeral=True)
         else:
-            await interaction.followup.send("Ein unerwarteter Fehler ist aufgetreten.", ephemeral=True)
+            # If already responded (e.g. deferred), use followup
+            try:
+                await interaction.followup.send("Ein unerwarteter Fehler ist aufgetreten.", ephemeral=True)
+            except discord.HTTPException as http_err: # e.g. if original interaction is too old for followup
+                log(f"Konnte keine Followup-Fehlernachricht senden: {http_err}")
+
 
 if __name__ == "__main__":
     if not TOKEN: 
@@ -442,3 +413,4 @@ if __name__ == "__main__":
             bot_instance.run(TOKEN, log_handler=None) 
         except discord.LoginFailure: log("❌ FATAL: Login zu Discord fehlgeschlagen. Token korrekt?")
         except Exception as e: log(f"❌ FATAL: Bot beendet durch Fehler: {e}"); traceback.print_exc()
+        

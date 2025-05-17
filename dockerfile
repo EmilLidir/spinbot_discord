@@ -57,4 +57,4 @@ COPY . .
 # Ensure your main script is executable if needed, though python command handles it
 # RUN chmod +x ./spin_bot_with_recaptcha.py
 
-CMD ["python", "./spin_bot_with_recaptcha.py"]
+CMD ["python", "./main.py"]
