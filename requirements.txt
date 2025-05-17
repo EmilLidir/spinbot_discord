@@ -1,3 +1,4 @@
 discord
 websocket-client
 asyncio
+selenium
