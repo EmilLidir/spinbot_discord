@@ -1,5 +1,5 @@
 # Use an official Python slim image as a parent image
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -7,26 +7,42 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies needed for Chrome, ChromeDriver, and basic utilities
 RUN apt-get update && apt-get install -y \
-    curl \
-    gnupg \
     wget \
-    unzip \
+    gnupg \
+    # Chrome dependencies
     libglib2.0-0 \
     libnss3 \
     libgconf-2-4 \
     libfontconfig1 \
     libx11-6 \
     libx11-xcb1 \
-    libxcb-dri3-0 \
     libxcb1 \
+    libxcb-dri3-0 \
     libxcomposite1 \
+    libxcursor1 \
     libxdamage1 \
     libxext6 \
     libxfixes3 \
+    libxi6 \
     libxrandr2 \
-    libgbm1 \
+    libxrender1 \
+    libxss1 \
+    libxtst6 \
     libasound2 \
-    && rm -rf /var/lib/apt/lists/*
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcairo2 \
+    libcups2 \
+    libdbus-1-3 \
+    libexpat1 \
+    libgbm1 \
+    libgtk-3-0 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    # End Chrome dependencies
+    xvfb \
+    --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install Google Chrome Stable
 RUN curl -sS -o - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - \
@@ -57,4 +73,4 @@ COPY . .
 # Ensure your main script is executable if needed, though python command handles it
 # RUN chmod +x ./spin_bot_with_recaptcha.py
 
-CMD ["python", "./main.py"]
+CMD ["python", "main.py"]

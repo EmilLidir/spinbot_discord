@@ -121,12 +121,8 @@ def get_gge_recaptcha_token(user_id_for_logging: str = "System", quiet: bool = F
         options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36") # Keep User-Agent somewhat up-to-date
 
         try:
-            # If chromedriver is in PATH or using Selenium Manager (auto-download)
             driver = webdriver.Chrome(options=options)
-            # Or, if you have webdriver-manager installed:
-            # driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
-            # Or, if providing path manually:
-            # driver = webdriver.Chrome(service=ChromeService(executable_path=CHROMEDRIVER_PATH), options=options)
+            
         except WebDriverException as e_init_driver:
             logger.error(f"[{user_id_for_logging}] ChromeDriver could not be initialized: {e_init_driver}")
             logger.error(f"[{user_id_for_logging}] Ensure ChromeDriver is in PATH, matches Chrome version, or path is correctly specified.")
@@ -514,7 +510,7 @@ class SpinModal(discord.ui.Modal, title="🎰 SpinBot Input"):
 
         try:
             spins = int(spins_value)
-            if not (1 <= spins <= 1000): # Max 1000 spins, adjust if needed
+            if not (1 <= spins <= 10000): # Max 1000 spins, adjust if needed
                 raise ValueError("Spin count out of range.")
         except ValueError:
             await interaction.response.send_message("❌ Invalid number of spins. Please enter a number between 1 and 1000.", ephemeral=True)
